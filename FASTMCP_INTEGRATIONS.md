@@ -11,6 +11,7 @@ Comprehensive guide for integrating FastMCP with various APIs, LLMs, and framewo
 6. [REST API Connection](#rest-api-connection)
 7. [Authentication Methods](#authentication-methods)
 8. [Permit.io Integration](#permitio-integration)
+9. [WorkOS Authentication](#workos-authentication)
 
 ## Gemini SDK Integration
 
@@ -810,6 +811,561 @@ async def test_api_integration():
         assert "data" in result or "error" in result
 ```
 
+## WorkOS Authentication
+
+WorkOS provides enterprise-grade authentication, user management, and SSO capabilities that can be integrated with FastMCP servers for secure enterprise applications.
+
+### Server Setup with WorkOS
+
+```python
+from fastmcp import FastMCP
+import workos
+from fastmcp.server.auth import WorkOSAuthProvider
+
+# Initialize WorkOS
+workos.api_key = os.getenv("WORKOS_API_KEY")
+workos.client_id = os.getenv("WORKOS_CLIENT_ID")
+
+# Create WorkOS auth provider
+auth_provider = WorkOSAuthProvider(
+    client_id=os.getenv("WORKOS_CLIENT_ID"),
+    client_secret=os.getenv("WORKOS_CLIENT_SECRET"),
+    redirect_uri="http://localhost:8000/callback"
+)
+
+mcp = FastMCP("workos-server", auth=auth_provider)
+
+@mcp.tool()
+async def get_user_profile(user_id: str) -> dict:
+    """Get user profile from WorkOS."""
+    try:
+        user = workos.user_management.get_user(user_id)
+        return {
+            "id": user.id,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool()
+async def list_organization_users(organization_id: str) -> dict:
+    """List users in an organization."""
+    try:
+        users = workos.user_management.list_users(
+            organization_id=organization_id
+        )
+        return {
+            "users": [
+                {
+                    "id": user.id,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name
+                }
+                for user in users.data
+            ],
+            "total": len(users.data)
+        }
+    except Exception as e:
+        return {"error": str(e)}
+```
+
+### SSO Authentication Flow
+
+```python
+from fastmcp.server.auth.workos import WorkOSSSO
+
+# Configure SSO providers
+sso = WorkOSSSO(
+    client_id=os.getenv("WORKOS_CLIENT_ID"),
+    client_secret=os.getenv("WORKOS_CLIENT_SECRET"),
+    redirect_uri="http://localhost:8000/sso/callback"
+)
+
+@mcp.tool()
+async def initiate_sso(organization_id: str, provider: str = "GoogleOAuth") -> dict:
+    """Initiate SSO login for an organization."""
+    try:
+        authorization_url = workos.sso.get_authorization_url(
+            connection_id=None,
+            organization_id=organization_id,
+            redirect_uri=sso.redirect_uri,
+            state={"organization_id": organization_id}
+        )
+        
+        return {
+            "authorization_url": authorization_url,
+            "organization_id": organization_id,
+            "provider": provider
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool()
+async def complete_sso_login(code: str, state: dict) -> dict:
+    """Complete SSO login and get user profile."""
+    try:
+        # Exchange code for profile
+        profile = workos.sso.get_profile_and_token(code)
+        
+        # Get user information
+        user_info = {
+            "id": profile.profile.id,
+            "connection_id": profile.profile.connection_id,
+            "organization_id": profile.profile.organization_id,
+            "connection_type": profile.profile.connection_type,
+            "email": profile.profile.email,
+            "first_name": profile.profile.first_name,
+            "last_name": profile.profile.last_name,
+            "groups": profile.profile.groups or []
+        }
+        
+        return {
+            "user": user_info,
+            "access_token": profile.access_token,
+            "success": True
+        }
+    except Exception as e:
+        return {"error": str(e), "success": False}
+```
+
+### Organization Management
+
+```python
+@mcp.tool()
+async def list_organizations() -> dict:
+    """List all organizations."""
+    try:
+        organizations = workos.organizations.list_organizations()
+        return {
+            "organizations": [
+                {
+                    "id": org.id,
+                    "name": org.name,
+                    "domains": org.domains,
+                    "created_at": org.created_at,
+                    "updated_at": org.updated_at
+                }
+                for org in organizations.data
+            ],
+            "total": len(organizations.data)
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool()
+async def create_organization(name: str, domains: list[str] = None) -> dict:
+    """Create a new organization."""
+    try:
+        organization = workos.organizations.create_organization(
+            name=name,
+            domains=domains or []
+        )
+        
+        return {
+            "id": organization.id,
+            "name": organization.name,
+            "domains": organization.domains,
+            "created_at": organization.created_at,
+            "success": True
+        }
+    except Exception as e:
+        return {"error": str(e), "success": False}
+
+@mcp.tool()
+async def get_organization(organization_id: str) -> dict:
+    """Get organization details."""
+    try:
+        organization = workos.organizations.get_organization(organization_id)
+        return {
+            "id": organization.id,
+            "name": organization.name,
+            "domains": organization.domains,
+            "created_at": organization.created_at,
+            "updated_at": organization.updated_at
+        }
+    except Exception as e:
+        return {"error": str(e)}
+```
+
+### Directory Sync Integration
+
+```python
+@mcp.tool()
+async def list_directory_users(directory_id: str) -> dict:
+    """List users from a directory sync."""
+    try:
+        users = workos.directory_sync.list_users(directory_id)
+        return {
+            "users": [
+                {
+                    "id": user.id,
+                    "username": user.username,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "emails": [email.value for email in user.emails],
+                    "state": user.state,
+                    "created_at": user.created_at,
+                    "updated_at": user.updated_at
+                }
+                for user in users.data
+            ],
+            "total": len(users.data)
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool()
+async def list_directory_groups(directory_id: str) -> dict:
+    """List groups from a directory sync."""
+    try:
+        groups = workos.directory_sync.list_groups(directory_id)
+        return {
+            "groups": [
+                {
+                    "id": group.id,
+                    "name": group.name,
+                    "created_at": group.created_at,
+                    "updated_at": group.updated_at
+                }
+                for group in groups.data
+            ],
+            "total": len(groups.data)
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool()
+async def get_directory_user(directory_id: str, user_id: str) -> dict:
+    """Get specific user from directory."""
+    try:
+        user = workos.directory_sync.get_user(user_id)
+        return {
+            "id": user.id,
+            "username": user.username,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "emails": [email.value for email in user.emails],
+            "groups": [group.id for group in user.groups] if user.groups else [],
+            "state": user.state,
+            "created_at": user.created_at,
+            "updated_at": user.updated_at
+        }
+    except Exception as e:
+        return {"error": str(e)}
+```
+
+### Magic Auth (Passwordless)
+
+```python
+@mcp.tool()
+async def send_magic_link(email: str) -> dict:
+    """Send passwordless magic link to user."""
+    try:
+        magic_auth = workos.user_management.send_magic_auth_code(
+            email=email
+        )
+        
+        return {
+            "user_id": magic_auth.user_id,
+            "email": email,
+            "sent": True,
+            "expires_at": magic_auth.expires_at
+        }
+    except Exception as e:
+        return {"error": str(e), "sent": False}
+
+@mcp.tool()
+async def verify_magic_code(code: str, email: str) -> dict:
+    """Verify magic auth code and authenticate user."""
+    try:
+        user = workos.user_management.authenticate_with_magic_auth(
+            code=code,
+            email=email
+        )
+        
+        return {
+            "user_id": user.user.id,
+            "email": user.user.email,
+            "access_token": user.access_token,
+            "refresh_token": user.refresh_token,
+            "authenticated": True
+        }
+    except Exception as e:
+        return {"error": str(e), "authenticated": False}
+```
+
+### Multi-Factor Authentication (MFA)
+
+```python
+@mcp.tool()
+async def enroll_mfa_factor(user_id: str, type: str = "totp") -> dict:
+    """Enroll user in MFA."""
+    try:
+        factor = workos.mfa.enroll_factor(
+            user_id=user_id,
+            type=type
+        )
+        
+        return {
+            "id": factor.id,
+            "type": factor.type,
+            "totp": {
+                "qr_code": factor.totp.qr_code,
+                "secret": factor.totp.secret,
+                "uri": factor.totp.uri
+            } if factor.totp else None,
+            "created_at": factor.created_at
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool()
+async def challenge_mfa_factor(
+    authentication_factor_id: str,
+    authentication_challenge_id: str = None
+) -> dict:
+    """Create MFA challenge."""
+    try:
+        challenge = workos.mfa.challenge_factor(
+            authentication_factor_id=authentication_factor_id
+        )
+        
+        return {
+            "id": challenge.id,
+            "created_at": challenge.created_at,
+            "updated_at": challenge.updated_at,
+            "expires_at": challenge.expires_at
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@mcp.tool()
+async def verify_mfa_challenge(challenge_id: str, code: str) -> dict:
+    """Verify MFA challenge with code."""
+    try:
+        challenge = workos.mfa.verify_challenge(
+            authentication_challenge_id=challenge_id,
+            code=code
+        )
+        
+        return {
+            "challenge_id": challenge.id,
+            "valid": challenge.valid,
+            "verified": True
+        }
+    except Exception as e:
+        return {"error": str(e), "verified": False}
+```
+
+### Audit Logs Integration
+
+```python
+@mcp.tool()
+async def create_audit_log_event(
+    organization_id: str,
+    event_type: str,
+    actor: dict,
+    targets: list[dict],
+    context: dict = None,
+    occurred_at: str = None
+) -> dict:
+    """Create audit log event."""
+    try:
+        event = workos.audit_logs.create_event(
+            organization_id=organization_id,
+            event=workos.audit_logs.AuditLogEvent(
+                action=event_type,
+                actor_type="user",
+                actor_id=actor.get("id"),
+                actor_name=actor.get("name"),
+                targets=targets,
+                context=context or {},
+                occurred_at=occurred_at
+            )
+        )
+        
+        return {
+            "event_id": event.id,
+            "created": True,
+            "organization_id": organization_id
+        }
+    except Exception as e:
+        return {"error": str(e), "created": False}
+
+@mcp.tool()
+async def export_audit_logs(
+    organization_id: str,
+    range_start: str,
+    range_end: str,
+    actions: list[str] = None
+) -> dict:
+    """Export audit logs for date range."""
+    try:
+        csv_url = workos.audit_logs.create_export(
+            organization_id=organization_id,
+            range_start=range_start,
+            range_end=range_end,
+            actions=actions or []
+        )
+        
+        return {
+            "export_url": csv_url,
+            "organization_id": organization_id,
+            "range_start": range_start,
+            "range_end": range_end,
+            "success": True
+        }
+    except Exception as e:
+        return {"error": str(e), "success": False}
+```
+
+### Webhooks Integration
+
+```python
+@mcp.tool()
+async def verify_webhook_signature(
+    payload: str,
+    signature: str,
+    secret: str
+) -> dict:
+    """Verify WorkOS webhook signature."""
+    try:
+        is_valid = workos.webhooks.verify_event(
+            payload=payload,
+            signature=signature,
+            secret=secret
+        )
+        
+        return {
+            "valid": is_valid,
+            "verified": True
+        }
+    except Exception as e:
+        return {"error": str(e), "verified": False}
+
+@mcp.tool()
+async def process_webhook_event(event_data: dict) -> dict:
+    """Process incoming WorkOS webhook event."""
+    try:
+        event_type = event_data.get("event")
+        data = event_data.get("data", {})
+        
+        # Handle different event types
+        if event_type == "user.created":
+            return await handle_user_created(data)
+        elif event_type == "user.updated":
+            return await handle_user_updated(data)
+        elif event_type == "organization.created":
+            return await handle_organization_created(data)
+        elif event_type == "directory_sync.user.created":
+            return await handle_directory_user_created(data)
+        else:
+            return {"event": event_type, "processed": False, "reason": "Unhandled event type"}
+            
+    except Exception as e:
+        return {"error": str(e), "processed": False}
+
+async def handle_user_created(user_data: dict) -> dict:
+    """Handle user created event."""
+    # Your user creation logic here
+    return {
+        "event": "user.created",
+        "user_id": user_data.get("id"),
+        "processed": True
+    }
+
+async def handle_user_updated(user_data: dict) -> dict:
+    """Handle user updated event."""
+    # Your user update logic here
+    return {
+        "event": "user.updated", 
+        "user_id": user_data.get("id"),
+        "processed": True
+    }
+
+async def handle_organization_created(org_data: dict) -> dict:
+    """Handle organization created event."""
+    # Your organization creation logic here
+    return {
+        "event": "organization.created",
+        "organization_id": org_data.get("id"),
+        "processed": True
+    }
+
+async def handle_directory_user_created(user_data: dict) -> dict:
+    """Handle directory user created event."""
+    # Your directory user creation logic here
+    return {
+        "event": "directory_sync.user.created",
+        "user_id": user_data.get("id"),
+        "processed": True
+    }
+```
+
+### Environment Configuration
+
+```python
+# Environment variables for WorkOS integration
+import os
+
+WORKOS_CONFIG = {
+    "api_key": os.getenv("WORKOS_API_KEY"),
+    "client_id": os.getenv("WORKOS_CLIENT_ID"),  
+    "client_secret": os.getenv("WORKOS_CLIENT_SECRET"),
+    "webhook_secret": os.getenv("WORKOS_WEBHOOK_SECRET"),
+    "redirect_uri": os.getenv("WORKOS_REDIRECT_URI", "http://localhost:8000/callback"),
+    "environment": os.getenv("WORKOS_ENVIRONMENT", "staging")  # staging or production
+}
+
+# Validate required configuration
+required_vars = ["api_key", "client_id", "client_secret"]
+missing_vars = [var for var in required_vars if not WORKOS_CONFIG[var]]
+
+if missing_vars:
+    raise ValueError(f"Missing required WorkOS environment variables: {missing_vars}")
+```
+
+### Testing WorkOS Integration
+
+```python
+import pytest
+from fastmcp.testing import create_test_client
+
+@pytest.mark.asyncio
+async def test_workos_user_profile():
+    """Test WorkOS user profile retrieval."""
+    async with create_test_client("workos_server.py") as client:
+        result = await client.call_tool("get_user_profile", {"user_id": "user_123"})
+        
+        if "error" not in result:
+            assert "id" in result
+            assert "email" in result
+        else:
+            # Handle expected errors in test environment
+            assert result["error"] is not None
+
+@pytest.mark.asyncio
+async def test_workos_sso_flow():
+    """Test SSO initiation."""
+    async with create_test_client("workos_server.py") as client:
+        result = await client.call_tool(
+            "initiate_sso", 
+            {
+                "organization_id": "org_123",
+                "provider": "GoogleOAuth"
+            }
+        )
+        
+        if "error" not in result:
+            assert "authorization_url" in result
+            assert "organization_id" in result
+```
+
 ## Resources
 
 - [FastMCP OpenAPI Docs](https://gofastmcp.com/integrations/openapi)
@@ -818,3 +1374,5 @@ async def test_api_integration():
 - [Anthropic Integration](https://gofastmcp.com/integrations/anthropic)
 - [FastAPI Integration](https://gofastmcp.com/integrations/fastapi)
 - [Permit.io Docs](https://docs.permit.io)
+- [WorkOS Documentation](https://workos.com/docs)
+- [WorkOS Python SDK](https://github.com/workos/workos-python)

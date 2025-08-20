@@ -11,6 +11,9 @@ This document covers advanced FastMCP v2 features that enhance server capabiliti
 6. [Tool Transformation](#tool-transformation)
 7. [Authentication Patterns](#authentication-patterns)
 8. [Client Configuration](#client-configuration)
+9. [Context Management](#context-management)
+10. [Server-Side Logging](#server-side-logging)
+11. [Proxy Server](#proxy-server)
 
 ## Resource Templates
 
@@ -655,6 +658,817 @@ async def batch_operation(items: list) -> dict:
 if __name__ == "__main__":
     mcp.run()
 ```
+
+## Context Management
+
+Context management in FastMCP provides request-scoped state sharing using Python's `contextvars` module. This enables clean data flow between middleware, tools, and resources without parameter passing.
+
+### Basic Context Variables
+```python
+from fastmcp import FastMCP
+from contextvars import ContextVar
+import asyncio
+
+# Define context variables
+current_user: ContextVar[dict] = ContextVar('current_user')
+request_id: ContextVar[str] = ContextVar('request_id')
+session_data: ContextVar[dict] = ContextVar('session_data')
+
+mcp = FastMCP("context-server")
+
+@mcp.middleware()
+async def context_middleware(request, next):
+    """Initialize request context."""
+    # Set request-scoped variables
+    request_id.set(f"req_{asyncio.current_task().get_name()}")
+    current_user.set({"id": "user123", "role": "admin"})
+    session_data.set({"last_action": "login", "preferences": {}})
+    
+    return await next(request)
+
+@mcp.tool()
+async def get_user_data() -> dict:
+    """Access context without parameters."""
+    user = current_user.get()
+    req_id = request_id.get()
+    
+    return {
+        "user_id": user["id"],
+        "request_id": req_id,
+        "authorized": user["role"] == "admin"
+    }
+
+@mcp.resource("user://profile")
+async def user_profile() -> dict:
+    """Resource using context."""
+    user = current_user.get()
+    session = session_data.get()
+    
+    return {
+        "user": user,
+        "last_action": session["last_action"]
+    }
+```
+
+### Advanced Context Patterns
+```python
+from contextvars import ContextVar, copy_context
+from dataclasses import dataclass
+from typing import Optional
+import structlog
+
+# Structured context data
+@dataclass
+class RequestContext:
+    request_id: str
+    user_id: Optional[str] = None
+    organization_id: Optional[str] = None
+    feature_flags: dict = None
+    start_time: float = None
+
+# Context variable
+ctx: ContextVar[RequestContext] = ContextVar('request_context')
+
+# Context manager for easy access
+class Context:
+    @staticmethod
+    def get() -> RequestContext:
+        return ctx.get()
+    
+    @staticmethod
+    def set(context: RequestContext):
+        ctx.set(context)
+    
+    @staticmethod
+    def get_user_id() -> Optional[str]:
+        return ctx.get().user_id
+    
+    @staticmethod
+    def get_request_id() -> str:
+        return ctx.get().request_id
+
+@mcp.middleware()
+async def enhanced_context_middleware(request, next):
+    """Enhanced context initialization."""
+    import time
+    import uuid
+    
+    # Create comprehensive context
+    context = RequestContext(
+        request_id=str(uuid.uuid4()),
+        user_id=request.get("user_id"),
+        organization_id=request.get("org_id"),
+        feature_flags=await load_feature_flags(request.get("user_id")),
+        start_time=time.time()
+    )
+    
+    Context.set(context)
+    
+    # Add to structured logging
+    structlog.contextvars.bind_contextvars(
+        request_id=context.request_id,
+        user_id=context.user_id
+    )
+    
+    try:
+        return await next(request)
+    finally:
+        # Log request completion
+        elapsed = time.time() - context.start_time
+        logger = structlog.get_logger()
+        logger.info("Request completed", elapsed_seconds=elapsed)
+```
+
+### Database Session Context
+```python
+from sqlalchemy.ext.asyncio import AsyncSession
+from contextvars import ContextVar
+
+db_session: ContextVar[AsyncSession] = ContextVar('db_session')
+
+@mcp.middleware()
+async def database_context_middleware(request, next):
+    """Provide database session in context."""
+    async with AsyncSessionLocal() as session:
+        db_session.set(session)
+        try:
+            response = await next(request)
+            await session.commit()
+            return response
+        except Exception:
+            await session.rollback()
+            raise
+
+@mcp.tool()
+async def create_user(name: str, email: str) -> dict:
+    """Create user using context session."""
+    session = db_session.get()
+    
+    user = User(name=name, email=email)
+    session.add(user)
+    await session.flush()  # Get ID without committing
+    
+    return {"id": user.id, "name": user.name}
+```
+
+### Propagating Context to Background Tasks
+```python
+import asyncio
+from contextvars import copy_context
+
+@mcp.tool()
+async def schedule_background_work(task_data: dict) -> dict:
+    """Schedule work that preserves context."""
+    # Copy current context
+    current_context = copy_context()
+    
+    async def background_task():
+        """Background task with preserved context."""
+        # Context variables are available here
+        user = current_user.get()
+        req_id = request_id.get()
+        
+        await perform_background_work(task_data, user, req_id)
+    
+    # Run in copied context
+    asyncio.create_task(background_task(), context=current_context)
+    
+    return {"status": "scheduled", "request_id": request_id.get()}
+```
+
+### Use Cases
+- User session management
+- Request tracing and correlation IDs
+- Database session sharing
+- Feature flag access
+- Audit logging context
+
+## Server-Side Logging
+
+FastMCP provides comprehensive logging capabilities that can stream log messages directly to clients, enabling real-time monitoring and debugging.
+
+### Basic Client Logging
+```python
+from fastmcp import FastMCP
+from fastmcp.logging import ClientLogger
+import structlog
+
+mcp = FastMCP("logging-server")
+
+# Enable client logging
+client_logger = ClientLogger(mcp)
+logger = structlog.get_logger()
+
+@mcp.tool()
+async def process_data(data: dict) -> dict:
+    """Tool with client-visible logging."""
+    
+    # These logs go to the client
+    await client_logger.info("Starting data processing", data_size=len(data))
+    
+    try:
+        # Process data with progress logging
+        for i, item in enumerate(data.get("items", [])):
+            await client_logger.debug(f"Processing item {i+1}", item_id=item.get("id"))
+            result = await process_item(item)
+            
+        await client_logger.info("Data processing completed successfully")
+        return {"status": "success", "processed": len(data.get("items", []))}
+        
+    except Exception as e:
+        await client_logger.error("Processing failed", error=str(e), exc_info=True)
+        raise
+```
+
+### Structured Logging Configuration
+```python
+import structlog
+from fastmcp.logging import setup_client_logging
+
+# Configure structured logging for client streaming
+setup_client_logging(
+    level="INFO",
+    format="json",
+    stream_to_client=True,
+    buffer_size=100,  # Buffer messages for batching
+    flush_interval=1.0,  # Flush every second
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.add_log_level,
+        structlog.processors.JSONRenderer()
+    ]
+)
+
+mcp = FastMCP("structured-logging-server")
+
+@mcp.tool()
+async def analyze_file(file_path: str) -> dict:
+    """File analysis with structured logging."""
+    logger = structlog.get_logger()
+    
+    # Structured log with context
+    await logger.ainfo(
+        "File analysis started",
+        file_path=file_path,
+        file_size=os.path.getsize(file_path),
+        request_id=request_id.get()
+    )
+    
+    results = []
+    async for chunk in read_file_chunks(file_path):
+        chunk_result = await analyze_chunk(chunk)
+        results.append(chunk_result)
+        
+        # Progress logging
+        await logger.adebug(
+            "Chunk processed",
+            chunk_number=len(results),
+            chunk_size=len(chunk),
+            patterns_found=len(chunk_result.get("patterns", []))
+        )
+    
+    await logger.ainfo(
+        "File analysis completed",
+        total_chunks=len(results),
+        patterns_found=sum(len(r.get("patterns", [])) for r in results)
+    )
+    
+    return {"results": results}
+```
+
+### Log Level Management
+```python
+from fastmcp.logging import LogLevel, DynamicLogger
+
+# Create logger with dynamic level control
+dynamic_logger = DynamicLogger(mcp, default_level=LogLevel.INFO)
+
+@mcp.tool()
+async def set_log_level(level: str) -> dict:
+    """Change logging level at runtime."""
+    log_level = LogLevel.from_string(level.upper())
+    dynamic_logger.set_level(log_level)
+    
+    await dynamic_logger.info(f"Log level changed to {level.upper()}")
+    return {"level": level, "status": "updated"}
+
+@mcp.tool()
+async def debug_operation(data: dict) -> dict:
+    """Operation with conditional debug logging."""
+    
+    # Always log at info level
+    await dynamic_logger.info("Debug operation started")
+    
+    # Debug logs only appear if level is DEBUG
+    await dynamic_logger.debug("Input data received", data=data)
+    await dynamic_logger.debug("Validation step", valid=validate_data(data))
+    
+    result = await process_data(data)
+    
+    await dynamic_logger.debug("Processing result", result=result)
+    await dynamic_logger.info("Debug operation completed")
+    
+    return result
+```
+
+### Categorized Logging
+```python
+from fastmcp.logging import CategoryLogger
+
+# Create category-specific loggers
+auth_logger = CategoryLogger(mcp, "auth")
+db_logger = CategoryLogger(mcp, "database")
+api_logger = CategoryLogger(mcp, "external_api")
+
+@mcp.tool()
+async def secure_operation(user_id: str, action: str) -> dict:
+    """Multi-category logging example."""
+    
+    # Authentication logging
+    await auth_logger.info("Authentication check", user_id=user_id)
+    user = await authenticate_user(user_id)
+    if not user:
+        await auth_logger.warning("Authentication failed", user_id=user_id)
+        raise AuthenticationError("Invalid user")
+    
+    # Database logging
+    await db_logger.debug("Database query starting", table="users", user_id=user_id)
+    user_data = await fetch_user_data(user_id)
+    await db_logger.debug("Database query completed", records_returned=len(user_data))
+    
+    # External API logging
+    await api_logger.info("External API call", endpoint="/api/process", action=action)
+    try:
+        api_result = await call_external_api(action, user_data)
+        await api_logger.info("External API success", response_size=len(api_result))
+    except Exception as e:
+        await api_logger.error("External API failed", error=str(e))
+        raise
+    
+    return {"status": "success", "user": user_data}
+```
+
+### Performance Logging
+```python
+from fastmcp.logging import PerformanceLogger
+import time
+
+perf_logger = PerformanceLogger(mcp)
+
+@mcp.tool()
+async def performance_sensitive_operation(data: list) -> dict:
+    """Operation with performance logging."""
+    
+    # Start timing
+    with perf_logger.timer("total_operation"):
+        
+        # Individual step timing
+        with perf_logger.timer("validation"):
+            await validate_input(data)
+        
+        results = []
+        with perf_logger.timer("processing"):
+            for item in data:
+                with perf_logger.timer("item_processing"):
+                    result = await process_item(item)
+                    results.append(result)
+        
+        with perf_logger.timer("finalization"):
+            final_result = await finalize_results(results)
+    
+    # Log performance summary
+    await perf_logger.info(
+        "Performance summary",
+        total_items=len(data),
+        processing_rate=len(data) / perf_logger.get_elapsed("processing")
+    )
+    
+    return final_result
+```
+
+### Client-Side Log Handling
+```python
+from fastmcp import Client
+import structlog
+
+async def log_handler(log_entry: dict):
+    """Handle logs from server."""
+    level = log_entry.get("level", "info")
+    message = log_entry.get("message", "")
+    context = log_entry.get("context", {})
+    
+    # Use client logger
+    client_logger = structlog.get_logger("mcp_server")
+    
+    if level == "debug":
+        client_logger.debug(message, **context)
+    elif level == "info":
+        client_logger.info(message, **context)
+    elif level == "warning":
+        client_logger.warning(message, **context)
+    elif level == "error":
+        client_logger.error(message, **context)
+    
+    # Could also display in UI
+    if log_entry.get("user_visible", False):
+        print(f"Server: {message}")
+
+client = Client("server.py", log_handler=log_handler)
+```
+
+### Use Cases
+- Real-time debugging
+- Progress monitoring
+- Error investigation
+- Performance analysis
+- Audit trails
+
+## Proxy Server
+
+FastMCP's proxy server enables advanced routing, load balancing, authentication, and aggregation of multiple MCP servers.
+
+### Basic Proxy Setup
+```python
+from fastmcp.proxy import MCPProxy
+from fastmcp.proxy.config import ProxyConfig, ServerConfig
+
+# Configure upstream servers
+config = ProxyConfig([
+    ServerConfig(
+        name="user-service",
+        url="http://localhost:8001",
+        prefix="/users",
+        weight=1
+    ),
+    ServerConfig(
+        name="data-service", 
+        url="http://localhost:8002",
+        prefix="/data",
+        weight=1
+    )
+])
+
+# Create and run proxy
+proxy = MCPProxy(config)
+proxy.run(host="0.0.0.0", port=8000)
+```
+
+### Advanced Routing Configuration
+```python
+from fastmcp.proxy import MCPProxy, Route, Matcher
+from fastmcp.proxy.routing import PathMatcher, HeaderMatcher, ToolMatcher
+
+proxy = MCPProxy()
+
+# Route by path patterns
+proxy.add_route(Route(
+    matcher=PathMatcher(pattern="/api/users/*"),
+    target="user-service",
+    strip_prefix="/api"
+))
+
+# Route by tool names
+proxy.add_route(Route(
+    matcher=ToolMatcher(patterns=["search_*", "query_*"]),
+    target="search-service"
+))
+
+# Route by headers
+proxy.add_route(Route(
+    matcher=HeaderMatcher(header="X-Service", value="analytics"),
+    target="analytics-service"
+))
+
+# Fallback route
+proxy.add_route(Route(
+    matcher=Matcher.any(),
+    target="default-service"
+))
+```
+
+### Load Balancing Strategies
+```python
+from fastmcp.proxy.balancing import RoundRobin, WeightedRandom, LeastConnections
+
+# Round-robin load balancing
+proxy = MCPProxy(
+    servers=[
+        ServerConfig("server1", "http://localhost:8001", weight=1),
+        ServerConfig("server2", "http://localhost:8002", weight=1),
+        ServerConfig("server3", "http://localhost:8003", weight=1)
+    ],
+    load_balancer=RoundRobin()
+)
+
+# Weighted random (for different server capacities)
+proxy = MCPProxy(
+    servers=[
+        ServerConfig("small-server", "http://localhost:8001", weight=1),
+        ServerConfig("large-server", "http://localhost:8002", weight=3)  # 3x traffic
+    ],
+    load_balancer=WeightedRandom()
+)
+
+# Least connections (for long-running operations)
+proxy = MCPProxy(
+    servers=[
+        ServerConfig("server1", "http://localhost:8001"),
+        ServerConfig("server2", "http://localhost:8002")
+    ],
+    load_balancer=LeastConnections()
+)
+```
+
+### Health Checks and Failover
+```python
+from fastmcp.proxy.health import HealthCheck, HTTPHealthCheck
+
+# Configure health checks
+health_check = HTTPHealthCheck(
+    path="/health",
+    interval=30,  # Check every 30 seconds
+    timeout=5,    # 5 second timeout
+    retries=3,    # 3 failed checks before marking unhealthy
+    success_codes=[200, 204]
+)
+
+proxy = MCPProxy(
+    servers=[
+        ServerConfig(
+            "primary", 
+            "http://localhost:8001",
+            health_check=health_check
+        ),
+        ServerConfig(
+            "backup", 
+            "http://localhost:8002", 
+            health_check=health_check
+        )
+    ],
+    failover_enabled=True
+)
+
+# Custom health check
+class CustomHealthCheck(HealthCheck):
+    async def check_health(self, server: ServerConfig) -> bool:
+        """Custom health check logic."""
+        try:
+            # Test actual MCP functionality
+            async with MCPClient(server.url) as client:
+                tools = await client.list_tools()
+                return len(tools) > 0
+        except Exception:
+            return False
+
+proxy = MCPProxy(
+    servers=[
+        ServerConfig("server1", "http://localhost:8001", 
+                    health_check=CustomHealthCheck())
+    ]
+)
+```
+
+### Authentication and Authorization
+```python
+from fastmcp.proxy.auth import ProxyAuth, JWTAuth, APIKeyAuth
+
+# JWT authentication
+jwt_auth = JWTAuth(
+    secret_key="your-secret-key",
+    algorithms=["HS256"],
+    verify_exp=True
+)
+
+# API key authentication
+api_auth = APIKeyAuth(
+    api_keys={"client1": "key1", "client2": "key2"},
+    header_name="X-API-Key"
+)
+
+# Configure proxy with authentication
+proxy = MCPProxy(
+    servers=[
+        ServerConfig("secure-service", "http://localhost:8001")
+    ],
+    auth=jwt_auth
+)
+
+# Route-specific authentication
+proxy.add_route(Route(
+    matcher=PathMatcher("/admin/*"),
+    target="admin-service",
+    auth=api_auth,  # Override proxy auth for admin routes
+    required_roles=["admin"]
+))
+```
+
+### Request/Response Transformation
+```python
+from fastmcp.proxy.transform import RequestTransformer, ResponseTransformer
+
+class AuthTransformer(RequestTransformer):
+    """Add authentication headers to upstream requests."""
+    
+    async def transform_request(self, request: dict, server: ServerConfig) -> dict:
+        # Add server-specific authentication
+        if server.name == "user-service":
+            request["headers"]["Authorization"] = f"Bearer {USER_SERVICE_TOKEN}"
+        elif server.name == "data-service":
+            request["headers"]["X-API-Key"] = DATA_SERVICE_KEY
+        
+        return request
+
+class ResponseTransformer(ResponseTransformer):
+    """Transform responses from upstream servers."""
+    
+    async def transform_response(self, response: dict, server: ServerConfig) -> dict:
+        # Add server identification
+        response["_server"] = server.name
+        response["_timestamp"] = time.time()
+        
+        # Filter sensitive data
+        if "password" in response:
+            response.pop("password")
+        
+        return response
+
+proxy = MCPProxy(
+    servers=[...],
+    request_transformer=AuthTransformer(),
+    response_transformer=ResponseTransformer()
+)
+```
+
+### Caching Layer
+```python
+from fastmcp.proxy.cache import RedisCache, MemoryCache
+
+# Redis-based caching
+cache = RedisCache(
+    url="redis://localhost:6379",
+    default_ttl=300,  # 5 minutes
+    key_prefix="mcp_proxy:"
+)
+
+# Memory-based caching (for development)
+cache = MemoryCache(
+    max_size=1000,
+    default_ttl=300
+)
+
+proxy = MCPProxy(
+    servers=[...],
+    cache=cache,
+    cache_rules=[
+        # Cache GET requests to resources
+        CacheRule(
+            matcher=PathMatcher("/resources/*"),
+            methods=["GET"],
+            ttl=600  # 10 minutes
+        ),
+        # Cache tool results based on input
+        CacheRule(
+            matcher=ToolMatcher(["expensive_calculation"]),
+            ttl=3600,  # 1 hour
+            vary_on=["args"]  # Cache key includes arguments
+        )
+    ]
+)
+```
+
+### Rate Limiting
+```python
+from fastmcp.proxy.ratelimit import RateLimiter, TokenBucket, SlidingWindow
+
+# Token bucket rate limiting
+rate_limiter = TokenBucket(
+    capacity=100,      # 100 requests
+    refill_rate=10,    # 10 requests per second
+    refill_period=1    # 1 second
+)
+
+# Sliding window rate limiting
+rate_limiter = SlidingWindow(
+    max_requests=1000,  # 1000 requests
+    window_size=3600    # per hour
+)
+
+proxy = MCPProxy(
+    servers=[...],
+    rate_limiter=rate_limiter,
+    rate_limit_rules=[
+        # Per-client limits
+        RateLimit(
+            matcher=HeaderMatcher("X-Client-ID", "heavy_user"),
+            limit=TokenBucket(capacity=200, refill_rate=20)
+        ),
+        # Per-endpoint limits
+        RateLimit(
+            matcher=PathMatcher("/expensive/*"),
+            limit=TokenBucket(capacity=10, refill_rate=1)
+        )
+    ]
+)
+```
+
+### Monitoring and Metrics
+```python
+from fastmcp.proxy.monitoring import ProxyMetrics
+from prometheus_client import start_http_server
+
+# Enable Prometheus metrics
+metrics = ProxyMetrics()
+proxy = MCPProxy(servers=[...], metrics=metrics)
+
+# Start metrics server
+start_http_server(9090)
+
+# Custom metrics
+@proxy.middleware()
+async def custom_metrics_middleware(request, next):
+    """Add custom metrics collection."""
+    start_time = time.time()
+    
+    try:
+        response = await next(request)
+        metrics.request_duration.observe(time.time() - start_time)
+        metrics.request_count.labels(status="success").inc()
+        return response
+    except Exception as e:
+        metrics.request_count.labels(status="error").inc()
+        metrics.error_count.labels(error_type=type(e).__name__).inc()
+        raise
+```
+
+### Complete Proxy Configuration
+```python
+from fastmcp.proxy import MCPProxy
+from fastmcp.proxy.config import ProxyConfig
+
+# Comprehensive proxy setup
+config = ProxyConfig(
+    servers=[
+        ServerConfig(
+            name="user-service",
+            url="http://user-service:8001",
+            prefix="/users",
+            weight=2,
+            health_check=HTTPHealthCheck("/health", interval=30),
+            max_connections=50
+        ),
+        ServerConfig(
+            name="data-service",
+            url="http://data-service:8002", 
+            prefix="/data",
+            weight=3,
+            health_check=HTTPHealthCheck("/health", interval=30),
+            max_connections=100
+        )
+    ],
+    
+    # Load balancing
+    load_balancer=WeightedRandom(),
+    
+    # Authentication
+    auth=JWTAuth(secret_key=os.getenv("JWT_SECRET")),
+    
+    # Caching
+    cache=RedisCache(url=os.getenv("REDIS_URL")),
+    
+    # Rate limiting
+    rate_limiter=TokenBucket(capacity=1000, refill_rate=100),
+    
+    # Monitoring
+    metrics=ProxyMetrics(),
+    
+    # Timeouts
+    upstream_timeout=30,
+    connect_timeout=5,
+    
+    # Retry policy
+    retry_attempts=3,
+    retry_backoff=1.0,
+    
+    # Security
+    allowed_hosts=["api.example.com"],
+    cors_enabled=True,
+    cors_origins=["https://app.example.com"]
+)
+
+proxy = MCPProxy(config)
+
+if __name__ == "__main__":
+    proxy.run(host="0.0.0.0", port=8000)
+```
+
+### Use Cases
+- Microservices aggregation
+- Load balancing and high availability
+- API gateway functionality
+- Cross-cutting concerns (auth, logging, monitoring)
+- Legacy system integration
+- Development/staging environment routing
 
 ## Resources
 

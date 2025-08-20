@@ -698,6 +698,106 @@ if __name__ == "__main__":
     asyncio.run(debug_session())
 ```
 
+## Import and Module Issues
+
+### Circular Import Error
+```python
+# Error: cannot import name 'X' from partially initialized module
+# This occurs when modules import from each other in a circle
+
+# ❌ WRONG: Circular dependency
+# shared/__init__.py
+from .monitoring import HealthCheck
+def get_api_client():
+    return APIClient()
+
+# shared/monitoring.py
+from . import get_api_client  # Creates circle!
+
+# ✅ CORRECT: Direct import
+# shared/monitoring.py
+from .api_client import APIClient
+client = APIClient()  # Create directly
+
+# Alternative: Lazy import
+# shared/monitoring.py
+def get_client():
+    from .api_client import APIClient
+    return APIClient()
+```
+
+### Module Architecture Best Practices
+```python
+# ❌ AVOID: Factory functions in __init__.py
+# shared/__init__.py
+_client = None
+def get_api_client():
+    global _client
+    if not _client:
+        from .api_client import APIClient  # Can cause import loops
+        _client = APIClient()
+    return _client
+
+# ✅ PREFER: Direct class imports
+# shared/__init__.py
+from .api_client import APIClient
+from .cache import CacheManager
+# Let consuming code create instances
+
+# Usage in other modules
+from shared.api_client import APIClient
+client = APIClient()
+```
+
+### Python Version Compatibility
+```python
+# Cloud environments may use newer Python versions
+# Handle deprecation warnings proactively
+
+# ❌ Deprecated (Python 3.12+):
+from datetime import datetime
+timestamp = datetime.utcnow()
+
+# ✅ Future-proof:
+from datetime import datetime, timezone
+timestamp = datetime.now(timezone.utc)
+
+# ❌ Deprecated async pattern:
+@asyncio.coroutine
+def old_async():
+    yield from asyncio.sleep(1)
+
+# ✅ Modern async:
+async def modern_async():
+    await asyncio.sleep(1)
+```
+
+### Import Path Issues in Cloud
+```python
+# Cloud deployment may have different sys.path
+
+# ❌ Relative imports that break:
+from src.shared import config  # Works locally, fails in cloud
+
+# ✅ Package-relative imports:
+from .shared import config  # When in same package
+from shared import config   # When shared is in sys.path
+
+# Debug import issues:
+import sys
+print("Python path:", sys.path)
+print("Current dir:", os.getcwd())
+
+# Fix: Ensure proper package structure
+project/
+├── src/
+│   ├── __init__.py  # Makes src a package
+│   ├── server.py
+│   └── shared/
+│       ├── __init__.py
+│       └── config.py
+```
+
 ## Common Error Messages
 
 ### FastMCP Errors

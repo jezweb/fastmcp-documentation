@@ -13,6 +13,7 @@ This document captures proven patterns and solutions for FastMCP development bas
 8. [Testing Patterns](#testing-patterns)
 9. [Deployment Patterns](#deployment-patterns)
 10. [Performance Patterns](#performance-patterns)
+11. [Shared Module Patterns](#shared-module-patterns)
 
 ## Server Initialization Patterns
 
@@ -1211,6 +1212,337 @@ def create_workflow_tool(steps: list):
         description="Execute multi-step workflow",
         fn=execute_workflow
     )
+```
+
+## Shared Module Patterns
+
+### Pattern 1: Direct Import Pattern (Recommended)
+**Use Case**: Shared utilities across multiple modules without circular dependencies
+
+```python
+# shared/__init__.py
+# Direct exports without factory functions or initialization logic
+from .api_client import APIClient
+from .cache import CacheManager
+from .config import Config
+from .logging import setup_logging
+
+__all__ = ['APIClient', 'CacheManager', 'Config', 'setup_logging']
+
+# shared/api_client.py
+class APIClient:
+    """API client that can be instantiated when needed."""
+    def __init__(self):
+        self.base_url = os.getenv('API_URL')
+        self.headers = {
+            'Authorization': f"Bearer {os.getenv('API_KEY')}"
+        }
+    
+    async def get(self, endpoint: str):
+        # Implementation
+        pass
+
+# Usage in other modules (monitoring.py)
+from shared.api_client import APIClient  # Direct import from submodule
+
+async def check_health():
+    client = APIClient()  # Create instance when needed
+    response = await client.get('/health')
+    return response
+```
+
+### Pattern 2: Lazy Initialization Pattern
+**Use Case**: Expensive resources that should only be created when first accessed
+
+```python
+# shared/resources.py
+from typing import Optional
+
+class ResourceManager:
+    """Manages expensive resources with lazy initialization."""
+    _instance: Optional['ResourceManager'] = None
+    _initialized: bool = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    async def initialize(self):
+        """Initialize resources on first use."""
+        if not self._initialized:
+            self.db_pool = await create_db_pool()
+            self.cache = await create_cache()
+            self._initialized = True
+    
+    async def get_db(self):
+        await self.initialize()
+        return self.db_pool
+    
+    async def get_cache(self):
+        await self.initialize()
+        return self.cache
+
+# Usage - no module-level initialization
+manager = ResourceManager()  # Lightweight, no actual initialization
+
+@mcp.tool()
+async def database_operation():
+    db = await manager.get_db()  # Initialization happens here
+    return await db.query("SELECT * FROM users")
+```
+
+### Pattern 3: Configuration Without Circular Imports
+**Use Case**: Shared configuration that multiple modules need
+
+```python
+# shared/config.py
+import os
+from typing import Optional
+
+class Config:
+    """Configuration without requiring imports from parent."""
+    # Class-level attributes, no imports needed
+    API_URL: str = os.getenv('API_URL', 'https://api.example.com')
+    API_KEY: str = os.getenv('API_KEY', '')
+    CACHE_TTL: int = int(os.getenv('CACHE_TTL', '300'))
+    
+    @classmethod
+    def validate(cls) -> bool:
+        """Validate configuration is complete."""
+        if not cls.API_KEY:
+            raise ValueError("API_KEY is required")
+        return True
+
+# shared/__init__.py
+from .config import Config
+
+# Validate at module level is OK if no circular dependencies
+try:
+    Config.validate()
+except ValueError as e:
+    print(f"Warning: {e}")
+
+# Usage in any module
+from shared.config import Config
+
+api_url = Config.API_URL  # Direct access, no function calls
+```
+
+### Anti-Pattern: Factory Functions with Circular Dependencies
+**AVOID**: This pattern causes circular import errors in cloud environments
+
+```python
+# ❌ WRONG - shared/__init__.py
+from .api_client import APIClient
+from .cache import CacheManager
+
+_api_client = None
+_cache = None
+
+def get_api_client():
+    """Factory function that can cause circular imports."""
+    global _api_client
+    if not _api_client:
+        # This import can be problematic
+        from .config import Config  # Circular if config imports from shared
+        _api_client = APIClient(Config.API_URL)
+    return _api_client
+
+def get_cache():
+    global _cache
+    if not _cache:
+        from .cache import CacheManager  # Another potential circular import
+        _cache = CacheManager()
+    return _cache
+
+# ❌ WRONG - shared/monitoring.py
+from . import get_api_client  # Can cause circular import!
+
+api_client = get_api_client()  # Module-level call = problem
+```
+
+### Pattern 4: Proper Module Structure for Cloud Deployment
+**Use Case**: Ensuring modules work in both local and cloud environments
+
+```python
+# Project structure
+project/
+├── src/
+│   ├── server.py          # Main entry point
+│   └── shared/            # Shared modules
+│       ├── __init__.py    # Minimal, just exports
+│       ├── api_client.py  # Self-contained
+│       ├── cache.py       # Self-contained
+│       ├── config.py      # Self-contained
+│       └── logging.py     # Self-contained
+
+# src/server.py
+from fastmcp import FastMCP
+from shared.config import Config
+from shared.api_client import APIClient
+from shared.cache import CacheManager
+
+# Module-level server (required for cloud)
+mcp = FastMCP(name="my-server")
+
+# Create instances as needed, not at module level
+@mcp.tool()
+async def fetch_data(endpoint: str):
+    client = APIClient()  # Create when needed
+    cache = CacheManager()
+    
+    # Check cache first
+    cached = await cache.get(endpoint)
+    if cached:
+        return cached
+    
+    # Fetch from API
+    data = await client.get(endpoint)
+    await cache.set(endpoint, data)
+    return data
+```
+
+### Pattern 5: Shared State Management
+**Use Case**: Managing shared state across modules without globals
+
+```python
+# shared/state.py
+import asyncio
+from typing import Dict, Any
+
+class StateManager:
+    """Thread-safe state management."""
+    
+    def __init__(self):
+        self._state: Dict[str, Any] = {}
+        self._locks: Dict[str, asyncio.Lock] = {}
+    
+    async def get(self, key: str, default=None):
+        """Get state value."""
+        return self._state.get(key, default)
+    
+    async def set(self, key: str, value: Any):
+        """Set state value with locking."""
+        if key not in self._locks:
+            self._locks[key] = asyncio.Lock()
+        
+        async with self._locks[key]:
+            self._state[key] = value
+    
+    async def update(self, key: str, updater):
+        """Update state with function."""
+        if key not in self._locks:
+            self._locks[key] = asyncio.Lock()
+        
+        async with self._locks[key]:
+            current = self._state.get(key)
+            self._state[key] = await updater(current)
+            return self._state[key]
+
+# shared/__init__.py
+from .state import StateManager
+
+# Single instance, but lightweight
+state = StateManager()
+
+# Usage in any module
+from shared import state
+
+@mcp.tool()
+async def increment_counter(name: str):
+    new_value = await state.update(
+        f"counter_{name}",
+        lambda x: (x or 0) + 1
+    )
+    return {"counter": name, "value": new_value}
+```
+
+### Pattern 6: Avoiding Import-Time Execution
+**Use Case**: Ensuring modules can be imported without side effects
+
+```python
+# ❌ WRONG - shared/database.py
+import asyncpg
+
+# This runs at import time - problematic!
+connection = asyncpg.connect('postgresql://...')
+
+# ✅ CORRECT - shared/database.py
+import asyncpg
+from typing import Optional
+
+class Database:
+    connection: Optional[asyncpg.Connection] = None
+    
+    @classmethod
+    async def connect(cls):
+        """Connect when needed, not at import."""
+        if cls.connection is None:
+            cls.connection = await asyncpg.connect('postgresql://...')
+        return cls.connection
+    
+    @classmethod
+    async def query(cls, sql: str):
+        conn = await cls.connect()
+        return await conn.fetch(sql)
+
+# Usage - no import-time execution
+from shared.database import Database
+
+@mcp.tool()
+async def get_users():
+    # Connection happens here, not at import
+    users = await Database.query("SELECT * FROM users")
+    return users
+```
+
+### Best Practices for Shared Modules
+
+1. **Keep __init__.py minimal**: Only use for exports, not logic
+2. **Avoid module-level execution**: Don't create connections or run code at import
+3. **Use direct imports**: Import from specific modules, not through __init__.py
+4. **Create instances when needed**: Don't create global instances at module level
+5. **Handle initialization explicitly**: Use async initialization methods
+6. **Avoid circular dependencies**: Keep modules self-contained
+7. **Test import order**: Ensure modules can be imported in any order
+
+### Testing Shared Module Imports
+
+```python
+# test_imports.py
+import sys
+import importlib
+
+def test_module_imports():
+    """Test that modules can be imported independently."""
+    modules = [
+        'shared.config',
+        'shared.api_client',
+        'shared.cache',
+        'shared.logging',
+        'shared.monitoring'  # This one had issues
+    ]
+    
+    for module_name in modules:
+        # Clear any existing imports
+        if module_name in sys.modules:
+            del sys.modules[module_name]
+        
+        try:
+            module = importlib.import_module(module_name)
+            print(f"✅ Successfully imported {module_name}")
+        except ImportError as e:
+            print(f"❌ Failed to import {module_name}: {e}")
+            return False
+    
+    return True
+
+if __name__ == "__main__":
+    if test_module_imports():
+        print("All modules import successfully!")
+    else:
+        print("Import issues detected - fix before deploying")
 ```
 
 ## Summary

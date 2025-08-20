@@ -354,6 +354,111 @@ curl https://my-server.fastmcp.app/mcp \
   }'
 ```
 
+## Module Architecture Considerations
+
+### Shared Module Best Practices
+
+When building FastMCP servers with shared utilities, module architecture becomes critical for cloud deployment success.
+
+#### ✅ Correct Shared Module Pattern
+```python
+# shared/__init__.py
+# Direct exports, no factory functions
+from .api_client import APIClient
+from .cache import CacheManager
+from .config import Config
+
+__all__ = ['APIClient', 'CacheManager', 'Config']
+
+# shared/api_client.py
+class APIClient:
+    def __init__(self):
+        # Initialize here
+        pass
+
+# Usage in other modules
+from shared import APIClient
+client = APIClient()  # Create instance when needed
+```
+
+#### ❌ Problematic Singleton Pattern
+```python
+# shared/__init__.py
+# AVOID: Factory functions that import from submodules
+_client = None
+
+def get_api_client():
+    global _client
+    if not _client:
+        from .api_client import APIClient  # Risky import
+        _client = APIClient()
+    return _client
+
+# shared/monitoring.py
+from . import get_api_client  # Can cause circular import!
+```
+
+### Python Version Compatibility
+
+FastMCP Cloud may run newer Python versions than your local environment.
+
+#### Handle Deprecations Proactively
+```python
+# ❌ Will trigger warnings in Python 3.12+
+from datetime import datetime
+timestamp = datetime.utcnow()
+hash_val = hashlib.md5(data)  # Missing usedforsecurity param
+
+# ✅ Future-proof code
+from datetime import datetime, timezone
+timestamp = datetime.now(timezone.utc)
+hash_val = hashlib.md5(data, usedforsecurity=False)
+```
+
+### Cloud vs Local Differences
+
+#### Import Paths
+```python
+# Local development structure
+project/
+├── server.py
+├── src/
+│   └── shared/
+│       └── config.py
+
+# ❌ Works locally, fails in cloud
+import sys
+sys.path.append('src')
+from shared import config
+
+# ✅ Proper package structure
+project/
+├── server.py
+└── shared/
+    ├── __init__.py
+    └── config.py
+
+from shared import config  # Works everywhere
+```
+
+#### Environment Detection
+```python
+# Detect if running in FastMCP Cloud
+import os
+
+IS_CLOUD = os.getenv('FASTMCP_CLOUD', 'false').lower() == 'true'
+IS_LOCAL = not IS_CLOUD
+
+if IS_CLOUD:
+    # Cloud-specific configuration
+    LOG_LEVEL = 'INFO'
+    CACHE_SIZE = 1000
+else:
+    # Local development settings
+    LOG_LEVEL = 'DEBUG'
+    CACHE_SIZE = 100
+```
+
 ## Common Pitfalls
 
 ### 1. Import Order Issues

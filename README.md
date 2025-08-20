@@ -22,13 +22,35 @@ This repository contains extensive documentation for FastMCP v2, including all a
 
 ### Project Templates
 
-The `project_template/` directory contains production-ready examples:
+We provide two template structures for different needs:
+
+#### 1. Simple Template (`project_template/`)
+Best for small to medium servers with straightforward functionality:
 
 - **server.py** - Basic MCP server template
 - **server_advanced.py** - Advanced server with all v2 features
 - **handlers.py** - Client handler implementations
 - **requirements.txt** - Dependency management
 - **.env.example** - Environment configuration template
+
+#### 2. Modular Template (`modular_template/`)
+Production-ready structure for complex servers with separation of concerns:
+
+- **src/server.py** - Main entry point with lifecycle hooks
+- **src/tools/** - Organized tool modules (data, API, file, utility)
+- **src/resources/** - Static and dynamic resources with templates
+- **src/prompts/** - Pre-defined prompt templates
+- **src/handlers/** - Client and event handlers
+- **src/shared/** - Utilities (config, cache, API client)
+- **pyproject.toml** - Modern Python project configuration
+- **.env.example** - Comprehensive environment variables
+
+Choose the modular template when you need:
+- Multiple tool categories with many functions
+- Complex resource management with caching
+- Client connection handling
+- Event-driven architecture
+- Shared utilities across modules
 
 ## 🚀 FastMCP v2 Features Covered
 
@@ -138,11 +160,21 @@ fastmcp-documentation/
 ├── FASTMCP_TROUBLESHOOTING.md      # Debugging guide
 ├── DEPLOYMENT_LEARNINGS.md         # Deployment insights
 ├── MONOREPO_STRATEGY.md           # Multi-server patterns
-└── project_template/               # Production-ready templates
-    ├── server.py                   # Basic server
-    ├── server_advanced.py          # Advanced features demo
-    ├── handlers.py                 # Client handlers
-    ├── requirements.txt            # Dependencies
+├── project_template/               # Simple template for basic servers
+│   ├── server.py                   # Basic server
+│   ├── server_advanced.py          # Advanced features demo
+│   ├── handlers.py                 # Client handlers
+│   ├── requirements.txt            # Dependencies
+│   └── .env.example               # Environment template
+└── modular_template/              # Modular template for complex servers
+    ├── src/
+    │   ├── server.py              # Main entry point
+    │   ├── tools/                 # Tool modules
+    │   ├── resources/             # Resource modules
+    │   ├── prompts/               # Prompt templates
+    │   ├── handlers/              # Event handlers
+    │   └── shared/                # Shared utilities
+    ├── pyproject.toml             # Project configuration
     └── .env.example               # Environment template
 ```
 

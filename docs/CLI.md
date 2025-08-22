@@ -39,7 +39,7 @@ pip install -e ".[dev]"
 ```bash
 # Check version
 fastmcp --version
-# Output: fastmcp version 0.2.0
+# Output: fastmcp version 2.12.0
 
 # Get help
 fastmcp --help
@@ -232,7 +232,7 @@ fastmcp config list
 ```bash
 # Set configuration value
 fastmcp config set server.name "my-awesome-server"
-fastmcp config set server.version "2.0.0"
+fastmcp config set server.version "2.12.0"
 fastmcp config set features.cache true
 
 # Add to arrays
@@ -442,7 +442,7 @@ export FASTMCP_TELEMETRY=false
 ```bash
 # Server configuration
 export MCP_SERVER_NAME="my-server"
-export MCP_SERVER_VERSION="1.0.0"
+export MCP_SERVER_VERSION="2.12.0"
 export MCP_SERVER_HOST="0.0.0.0"
 export MCP_SERVER_PORT="8000"
 
@@ -467,7 +467,7 @@ export MCP_API_TIMEOUT="30"
 ```json
 {
   "name": "my-mcp-server",
-  "version": "1.0.0",
+  "version": "2.12.0",
   "description": "My awesome MCP server",
   "author": "Your Name",
   "license": "MIT",
@@ -492,9 +492,9 @@ export MCP_API_TIMEOUT="30"
   },
   
   "dependencies": {
-    "fastmcp": "^0.2.0",
-    "aiohttp": "^3.9.0",
-    "pydantic": "^2.0.0"
+    "fastmcp": "^2.12.0",
+    "aiohttp": "^3.10.0",
+    "pydantic": "^2.5.0"
   },
   
   "scripts": {
@@ -538,7 +538,7 @@ export MCP_API_TIMEOUT="30"
 ```yaml
 # Alternative YAML configuration
 name: my-mcp-server
-version: 1.0.0
+version: 2.12.0
 description: My awesome MCP server
 
 server:
@@ -584,7 +584,7 @@ environments:
 ```toml
 [tool.fastmcp]
 name = "my-mcp-server"
-version = "1.0.0"
+version = "2.12.0"
 
 [tool.fastmcp.server]
 entry = "src/server.py"

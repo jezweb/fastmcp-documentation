@@ -85,8 +85,7 @@ import os
 
 # MUST be at module level
 mcp = FastMCP(
-    name="production-server",
-    version="1.0.0"
+    name="production-server"
 )
 
 # Use environment variables
@@ -233,6 +232,7 @@ For advanced deployment scenarios, see the `complex-detail/` folder:
 - [FastMCP Cloud](https://fastmcp.cloud) - Deploy your servers
 - [FastMCP GitHub](https://github.com/jlowin/fastmcp) - Source code
 - [MCP Protocol](https://modelcontextprotocol.io) - Protocol specification
+- Context 7 official docs library: context7CompatibleLibraryID: "/jlowin/fastmcp"
 
 ## 📝 License
 
@@ -241,4 +241,4 @@ This documentation is for internal reference and development guidance.
 ---
 
 *Last Updated: August 2025*
-*FastMCP Version: 0.3.0+*
+*FastMCP Version: 2.12.0+*

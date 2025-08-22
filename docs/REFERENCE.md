@@ -8,12 +8,20 @@
 python server.py
 fastmcp run server.py
 
+# Run with factory function
+fastmcp run server.py:create_server
+fastmcp run server.py:server_factory
+
+# Run with async factory function
+fastmcp run server.py:async_create_server
+
 # Run with HTTP transport
 python server.py --transport http --port 8000
 fastmcp run server.py --transport http
 
 # Development mode with inspector
 fastmcp dev server.py
+fastmcp dev server.py:create_server
 
 # With specific Python version
 fastmcp run server.py --python 3.11
@@ -78,7 +86,11 @@ def create_server() -> FastMCP:
     # Complex setup
     return mcp
 
+# For FastMCP Cloud - expose at module level
 mcp = create_server()
+
+# Or use with CLI directly
+# Run with: fastmcp run server.py:create_server
 ```
 
 ### Environment Variables
@@ -155,9 +167,13 @@ route_maps = [
 ```python
 from fastmcp import Client
 
-async def handle_elicitation(message: str, response_type: type, context: dict):
+async def handle_elicitation(message: str, response_type: type):
     """Handle interactive input requests."""
-    return input(f"{message}: ")
+    # For simple text input
+    if response_type == str:
+        return input(f"{message}: ")
+    # For complex types, gather structured data
+    return {"field": "value"}
 
 client = Client("server.py", elicitation_handler=handle_elicitation)
 ```
@@ -175,10 +191,16 @@ client = Client("server.py", progress_handler=handle_progress)
 
 ### Sampling Handler
 ```python
-async def handle_sampling(messages, params, context):
+async def handle_sampling(messages, model_preferences):
     """Handle LLM requests from server."""
-    # Integrate with your preferred LLM
-    return llm.generate(messages, **params)
+    # messages is a list of {"role": str, "content": str}
+    # model_preferences may contain temperature, maxTokens, systemPrompt, etc.
+    response = await llm.generate(
+        messages,
+        temperature=model_preferences.get('temperature', 0.7),
+        max_tokens=model_preferences.get('maxTokens', 1000)
+    )
+    return {"text": response}
 
 client = Client("server.py", sampling_handler=handle_sampling)
 ```

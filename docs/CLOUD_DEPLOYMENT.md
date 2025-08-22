@@ -53,11 +53,11 @@ if __name__ == "__main__":
     main()
 ```
 
-### ❌ INCORRECT Patterns
+### ❌ INCORRECT Patterns for Direct Module Import
 
-**Pattern 1: Function Wrapper (FAILS)**
+**Pattern 1: Function Wrapper Without Module-Level Assignment**
 ```python
-# This will cause "No server object found" error
+# This fails if not exposed at module level
 def create_server():
     mcp = FastMCP(name="my-server")
     
@@ -67,14 +67,14 @@ def create_server():
     
     return mcp
 
-# Even if you do this, it won't work:
+# FAILS: Not at module level
 if __name__ == "__main__":
-    server = create_server()  # Too late!
+    server = create_server()  # Not accessible to FastMCP Cloud
 ```
 
-**Pattern 2: Class Wrapper (FAILS)**
+**Pattern 2: Class Wrapper Without Module-Level Instance**
 ```python
-# This also fails
+# This also fails without module-level exposure
 class MyServer:
     def __init__(self):
         self.mcp = FastMCP(name="my-server")
@@ -84,12 +84,77 @@ class MyServer:
         async def my_tool():
             pass
 
-# Won't work
-server_instance = MyServer()
+# FAILS: Instance not at module level
+if __name__ == "__main__":
+    server_instance = MyServer()
+```
+
+### ✅ CORRECT Factory Pattern Usage
+
+**Option 1: Module-Level Assignment from Factory**
+```python
+# server.py
+from fastmcp import FastMCP
+
+def create_server() -> FastMCP:
+    """Factory function to create and configure server."""
+    mcp = FastMCP(name="my-server")
+    
+    @mcp.tool()
+    async def my_tool(param: str) -> str:
+        return f"Result: {param}"
+    
+    # Additional setup
+    return mcp
+
+# Module-level assignment - FastMCP Cloud can find this
+mcp = create_server()
+```
+
+**Option 2: Async Factory Function**
+```python
+# server.py
+from fastmcp import FastMCP
+
+async def create_server() -> FastMCP:
+    """Async factory for complex initialization."""
+    mcp = FastMCP(name="my-server")
+    
+    # Can perform async setup here
+    await setup_database()
+    
+    @mcp.tool()
+    async def query_data(query: str) -> dict:
+        return await fetch_data(query)
+    
+    return mcp
+
+# For FastMCP Cloud - expose at module level
+mcp = asyncio.run(create_server())
+
+# Or use with CLI
+# fastmcp run server.py:create_server
+```
+
+**Option 3: Direct CLI Factory Support**
+```python
+# server.py
+def server_factory() -> FastMCP:
+    """Factory function called by FastMCP CLI."""
+    mcp = FastMCP(name="configured-server")
+    # Configuration based on environment
+    if os.getenv("PRODUCTION"):
+        configure_production(mcp)
+    return mcp
+
+# Run with: fastmcp run server.py:server_factory
 ```
 
 ### Why This Matters
-FastMCP Cloud imports your module and looks for the server object immediately. It doesn't execute your `main()` function or any initialization code.
+FastMCP Cloud and the CLI support multiple patterns:
+1. **Direct import**: Looks for module-level `mcp`, `server`, or `app` objects
+2. **Factory functions**: Can call specified factory functions via CLI
+3. **Module-level assignment**: Assign factory result to module-level variable for Cloud compatibility
 
 ## Dependency Management
 

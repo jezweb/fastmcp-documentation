@@ -73,49 +73,85 @@ Elicitation allows servers to request structured input from users during tool ex
 
 ### Server Implementation
 ```python
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
+from dataclasses import dataclass
+from typing import Literal
 
 mcp = FastMCP("interactive-server")
 
+@dataclass
+class ProjectConfig:
+    name: str
+    type: Literal["web", "api", "cli"]
+    description: str
+
 @mcp.tool()
-async def create_project(name: str = None, type: str = None):
+async def create_project(ctx: Context) -> str:
     """Create project with interactive parameter gathering."""
     
-    # Server can request missing parameters via elicitation
-    if not name:
-        # This would trigger elicitation on the client
-        name = await request_input("project_name", "Enter project name:")
+    # Request structured input from the client
+    result = await ctx.elicit(
+        "Please provide project configuration:",
+        response_type=ProjectConfig
+    )
     
-    if not type:
-        type = await request_input("project_type", 
-                                 "Select project type:",
-                                 choices=["web", "api", "cli"])
+    if result.action == "accept":
+        config = result.data
+        # Create project with provided configuration
+        return f"Created {config.type} project: {config.name}"
+    elif result.action == "decline":
+        return "Project creation declined by user"
+    else:
+        return "Project creation cancelled"
+
+@mcp.tool()
+async def confirm_deletion(file_path: str, ctx: Context) -> str:
+    """Delete file with user confirmation."""
     
-    return create_project_structure(name, type)
+    # Simple confirmation (expects empty response)
+    result = await ctx.elicit(
+        f"Are you sure you want to delete {file_path}?",
+        response_type=None  # Just confirmation
+    )
+    
+    if result.action == "accept":
+        # Perform deletion
+        return f"Deleted {file_path}"
+    else:
+        return "Deletion cancelled"
 ```
 
 ### Client Handler Implementation
 ```python
 from fastmcp import Client
-from dataclasses import dataclass
+from fastmcp.client.elicitation import ElicitResult
 
-@dataclass
-class ProjectInput:
-    project_name: str
-    project_type: str
-
-async def elicitation_handler(message: str, response_type: type, context: dict):
+async def elicitation_handler(
+    message: str, 
+    response_type: type, 
+    params, 
+    context
+):
     """Handle elicitation requests from server."""
     print(f"Server requests: {message}")
     
-    # Collect user input based on response_type
-    if response_type == ProjectInput:
-        name = input("Project name: ")
-        type = input("Project type (web/api/cli): ")
-        return ProjectInput(project_name=name, project_type=type)
-    
-    # Can also decline or cancel
-    # return ElicitationResponse.decline("User cancelled")
+    # response_type is a dataclass created from the server's schema
+    if response_type:
+        # Collect user input
+        if hasattr(response_type, '__annotations__'):
+            # Build response based on dataclass fields
+            kwargs = {}
+            for field, field_type in response_type.__annotations__.items():
+                value = input(f"{field}: ")
+                kwargs[field] = value
+            return response_type(**kwargs)
+    else:
+        # Simple confirmation
+        confirm = input("Confirm? (y/n): ")
+        if confirm.lower() == 'y':
+            return {}  # Empty object for confirmation
+        else:
+            return ElicitResult(action="decline")
 
 # Create client with handler
 client = Client("server.py", elicitation_handler=elicitation_handler)
@@ -136,43 +172,69 @@ Progress tracking enables monitoring of long-running operations, essential for u
 
 ### Server Implementation
 ```python
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
+import asyncio
 
 mcp = FastMCP("progress-server")
 
 @mcp.tool()
-async def batch_process(items: list) -> dict:
+async def batch_process(items: list[str], ctx: Context) -> dict:
     """Process items with progress reporting."""
     results = []
     total = len(items)
     
     for i, item in enumerate(items):
         # Report progress to client
-        await report_progress(
-            progress=i + 1,
-            total=total,
-            message=f"Processing {item}..."
+        await ctx.report_progress(
+            progress=i,
+            total=total
         )
         
-        result = await process_item(item)
+        # Simulate processing
+        await asyncio.sleep(0.1)
+        result = item.upper()
         results.append(result)
+    
+    # Report completion
+    await ctx.report_progress(progress=total, total=total)
     
     return {"processed": total, "results": results}
 
 @mcp.tool()
-async def long_analysis(data: dict) -> dict:
-    """Long-running analysis with stage reporting."""
-    stages = ["Validating", "Analyzing", "Generating Report"]
+async def multi_stage_operation(ctx: Context) -> str:
+    """Operation with percentage-based progress."""
+    stages = [
+        ("Initializing", 25),
+        ("Processing data", 50),
+        ("Analyzing results", 75),
+        ("Generating report", 100)
+    ]
     
-    for i, stage in enumerate(stages):
-        await report_progress(
-            progress=i + 1,
-            total=len(stages),
-            message=stage
+    for stage_name, percentage in stages:
+        await ctx.info(f"Stage: {stage_name}")
+        await ctx.report_progress(
+            progress=percentage,
+            total=100
         )
-        await perform_stage(stage, data)
+        await asyncio.sleep(0.5)  # Simulate work
     
-    return {"status": "complete"}
+    return "Operation completed successfully"
+
+@mcp.tool()
+async def indeterminate_scan(directory: str, ctx: Context) -> dict:
+    """Scan with unknown total items."""
+    files_found = 0
+    
+    # Simulate scanning unknown number of files
+    for _ in range(10):  # Unknown at start
+        files_found += 1
+        
+        # Progress without total for indeterminate operations
+        await ctx.report_progress(progress=files_found)
+        
+        await asyncio.sleep(0.2)
+    
+    return {"files_found": files_found, "directory": directory}
 ```
 
 ### Client Handler
@@ -205,41 +267,63 @@ Sampling allows MCP servers to request LLM completions from clients, enabling AI
 
 ### Server Implementation
 ```python
-from fastmcp import FastMCP
+from fastmcp import FastMCP, Context
+from fastmcp.client.sampling import SamplingMessage
 
 mcp = FastMCP("ai-powered-server")
 
 @mcp.tool()
-async def generate_description(product: dict) -> str:
-    """Generate product description using LLM."""
+async def analyze_sentiment(text: str, ctx: Context) -> dict:
+    """Analyze sentiment using client's LLM."""
     
-    # Request LLM completion from client
+    # Simple text prompt
+    response = await ctx.sample(
+        f"Analyze the sentiment of this text as positive, negative, or neutral. "
+        f"Reply with just one word.\n\nText: {text}",
+        temperature=0.3
+    )
+    
+    sentiment = response.text.strip().lower()
+    return {"text": text, "sentiment": sentiment}
+
+@mcp.tool()
+async def generate_description(product: dict, ctx: Context) -> str:
+    """Generate product description using LLM with parameters."""
+    
+    # Create the prompt
     prompt = f"""Generate a compelling product description for:
     Name: {product['name']}
     Category: {product['category']}
     Features: {', '.join(product['features'])}
     """
     
-    description = await request_sampling(
+    # Request with system prompt and parameters
+    response = await ctx.sample(
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.7,
-        max_tokens=200
+        modelPreferences={
+            "temperature": 0.7,
+            "maxTokens": 200,
+            "systemPrompt": "You are a creative product description writer."
+        }
     )
     
-    return description
+    return response.text
 
 @mcp.tool()
-async def validate_content(text: str) -> dict:
+async def validate_content(text: str, ctx: Context) -> dict:
     """Validate content using AI."""
     
     validation_prompt = f"Analyze this text for issues: {text}"
     
-    analysis = await request_sampling(
+    response = await ctx.sample(
         messages=[{"role": "user", "content": validation_prompt}],
-        system_prompt="You are a content validator. Check for errors, bias, and clarity."
+        modelPreferences={
+            "systemPrompt": "You are a content validator. Check for errors, bias, and clarity.",
+            "temperature": 0.3
+        }
     )
     
-    return {"original": text, "analysis": analysis}
+    return {"original": text, "analysis": response.text}
 ```
 
 ### Client Handler with Gemini
@@ -247,27 +331,32 @@ async def validate_content(text: str) -> dict:
 from fastmcp import Client
 import google.generativeai as genai
 
-async def sampling_handler(messages, params, context):
+async def sampling_handler(messages, model_preferences):
     """Handle sampling requests using Gemini."""
-    model = genai.GenerativeModel('gemini-2.0-flash')
+    model = genai.GenerativeModel('gemini-2.0-flash-001')
     
     # Convert messages to Gemini format
-    prompt = "\n".join([f"{m.role}: {m.content.text}" for m in messages])
+    prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
     
     # Add system prompt if provided
-    if params.systemPrompt:
-        prompt = f"{params.systemPrompt}\n\n{prompt}"
+    if model_preferences and model_preferences.get('systemPrompt'):
+        prompt = f"{model_preferences['systemPrompt']}\n\n{prompt}"
+    
+    # Extract generation config
+    generation_config = {}
+    if model_preferences:
+        if 'temperature' in model_preferences:
+            generation_config['temperature'] = model_preferences['temperature']
+        if 'maxTokens' in model_preferences:
+            generation_config['max_output_tokens'] = model_preferences['maxTokens']
     
     # Generate response
     response = model.generate_content(
         prompt,
-        generation_config={
-            "temperature": params.temperature or 0.7,
-            "max_output_tokens": params.maxTokens or 1000,
-        }
+        generation_config=generation_config or None
     )
     
-    return response.text
+    return {"text": response.text}
 
 client = Client("server.py", sampling_handler=sampling_handler)
 ```
@@ -648,10 +737,14 @@ mcp.add_tool(simple_tool)
 
 # Add progress tracking
 @mcp.tool()
-async def batch_operation(items: list) -> dict:
+async def batch_operation(items: list, ctx: Context) -> dict:
     """Process with progress."""
     for i, item in enumerate(items):
-        await report_progress(i+1, len(items), f"Processing {item}")
+        await ctx.report_progress(
+            progress=i+1,
+            total=len(items),
+            message=f"Processing {item}"
+        )
         await process(item)
     return {"status": "complete"}
 

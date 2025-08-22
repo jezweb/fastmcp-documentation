@@ -6,16 +6,11 @@ Dynamic resources with template support.
 
 import logging
 import json
-import sys
-from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 import random
 
-# Add parent directories to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from shared import Config, get_cache_value, set_cache_value
+from ..utils import Config, get_cache_value, set_cache_value
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 [project]
-name = "fastmcp-modular-server"
+name = "fastmcp-structured-server"
 version = "0.1.0"
-description = "A modular FastMCP server template with organized structure"
+description = "A structured FastMCP server template with self-contained architecture"
 requires-python = ">=3.10"
 dependencies = [
     "fastmcp>=2.12.0",

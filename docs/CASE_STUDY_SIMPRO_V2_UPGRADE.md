@@ -125,7 +125,7 @@ class RetryHandler:
 
 ### Challenge 1: Import Path Resolution
 **Issue:** Relative imports (`from ..shared import`) failing in new structure  
-**Solution:** Changed to absolute imports (`from shared import`)
+**Solution:** Migrated to self-contained architecture (`from utils import`)
 
 ### Challenge 2: FastMCP API Changes
 **Issue:** `description` parameter removed from FastMCP constructor  

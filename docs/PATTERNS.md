@@ -13,7 +13,7 @@ This document captures proven patterns and solutions for FastMCP development bas
 8. [Testing Patterns](#testing-patterns)
 9. [Deployment Patterns](#deployment-patterns)
 10. [Performance Patterns](#performance-patterns)
-11. [Shared Module Patterns](#shared-module-patterns)
+11. [Self-Contained Server Patterns](#self-contained-server-patterns)
 
 ## Server Initialization Patterns
 
@@ -1194,41 +1194,80 @@ def create_workflow_tool(steps: list):
     )
 ```
 
-## Shared Module Patterns
+## Self-Contained Server Patterns
 
-### Pattern 1: Direct Import Pattern (Recommended)
-**Use Case**: Shared utilities across multiple modules without circular dependencies
+### Pattern 1: Self-Contained Utils Module (Recommended)
+**Use Case**: All utility functions in a single utils.py file within each server
 
 ```python
-# shared/__init__.py
-# Direct exports without factory functions or initialization logic
-from .api_client import APIClient
-from .cache import CacheManager
-from .config import Config
-from .logging import setup_logging
+# src/utils.py - Single file with all utilities
+import os
+import json
+import logging
+from typing import Dict, Any, Optional
+from datetime import datetime
 
-__all__ = ['APIClient', 'CacheManager', 'Config', 'setup_logging']
+class Config:
+    """Application configuration from environment variables."""
+    SERVER_NAME = os.getenv("SERVER_NAME", "FastMCP Server")
+    SERVER_VERSION = "1.0.0"
+    ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+    API_BASE_URL = os.getenv("API_BASE_URL")
+    API_KEY = os.getenv("API_KEY")
+    ENABLE_CACHE = os.getenv("ENABLE_CACHE", "true").lower() == "true"
+    CACHE_TTL = int(os.getenv("CACHE_TTL", "300"))
 
-# shared/api_client.py
+def format_success(data: Any, message: str = "Success") -> Dict[str, Any]:
+    """Format a successful response."""
+    return {
+        "success": True,
+        "message": message,
+        "data": data,
+        "timestamp": datetime.now().isoformat()
+    }
+
+def format_error(error: str, code: str = "ERROR") -> Dict[str, Any]:
+    """Format an error response."""
+    return {
+        "success": False,
+        "error": error,
+        "code": code,
+        "timestamp": datetime.now().isoformat()
+    }
+
 class APIClient:
-    """API client that can be instantiated when needed."""
+    """Simple API client."""
     def __init__(self):
-        self.base_url = os.getenv('API_URL')
-        self.headers = {
-            'Authorization': f"Bearer {os.getenv('API_KEY')}"
-        }
+        self.base_url = Config.API_BASE_URL
+        self.headers = {"Authorization": f"Bearer {Config.API_KEY}"}
     
     async def get(self, endpoint: str):
-        # Implementation
+        # Implementation here
         pass
 
-# Usage in other modules (monitoring.py)
-from shared.api_client import APIClient  # Direct import from submodule
+# Cache implementation
+_cache: Dict[str, Any] = {}
 
-async def check_health():
-    client = APIClient()  # Create instance when needed
-    response = await client.get('/health')
-    return response
+async def get_cache_value(key: str) -> Optional[Any]:
+    return _cache.get(key)
+
+async def set_cache_value(key: str, value: Any, ttl: int = None) -> None:
+    _cache[key] = value
+
+# Usage in tools/data_tools.py
+from ..utils import format_success, format_error, Config, APIClient
+
+@mcp.tool()
+async def process_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        # Use utilities
+        if Config.API_BASE_URL:
+            client = APIClient()
+            result = await client.get("/process")
+        
+        return format_success({"processed": True})
+    except Exception as e:
+        return format_error(str(e))
 ```
 
 ### Pattern 2: Lazy Initialization Pattern

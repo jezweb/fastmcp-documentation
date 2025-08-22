@@ -5,6 +5,7 @@ A production-ready template for building FastMCP servers.
 ## Features
 
 - ✅ Complete project structure
+- ✅ Self-contained single-file design
 - ✅ Environment variable management
 - ✅ API integration support
 - ✅ Error handling and logging

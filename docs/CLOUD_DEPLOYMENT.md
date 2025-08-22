@@ -441,8 +441,8 @@ class APIClient:
         # Initialize here
         pass
 
-# Usage in other modules
-from shared import APIClient
+# Usage within the same server - self-contained utils
+from .utils import APIClient
 client = APIClient()  # Create instance when needed
 ```
 
@@ -491,19 +491,17 @@ project/
 │   └── shared/
 │       └── config.py
 
-# ❌ Works locally, fails in cloud
+# ❌ Works locally, fails in cloud - shared imports  
 import sys
 sys.path.append('src')
 from shared import config
 
-# ✅ Proper package structure
+# ✅ Self-contained server structure (recommended)
 project/
 ├── server.py
-└── shared/
-    ├── __init__.py
-    └── config.py
+└── utils.py      # All utilities in one file
 
-from shared import config  # Works everywhere
+from utils import Config  # Self-contained, no shared dependencies
 ```
 
 #### Environment Detection
@@ -529,12 +527,12 @@ else:
 ### 1. Import Order Issues
 ```python
 # ❌ Wrong: Config used before validation
-from shared import Config
+from utils import Config
 
 API_URL = Config.API_URL  # Might not be validated yet
 
 # ✅ Right: Validate first
-from shared import Config
+from utils import Config
 
 Config.validate()  # Validate immediately
 API_URL = Config.API_URL
@@ -642,10 +640,10 @@ cp -r ../shared project/src/shared
 
 ### "Module not found"
 ```python
-# Fix imports - use relative imports within package
-from .shared import Config  # If shared is in same directory
+# Fix imports - use self-contained utils
+from .utils import Config  # If utils.py is in same directory
 # or
-from shared import Config  # If shared is in src/
+from utils import Config  # If utils.py is at root level
 ```
 
 ### "Connection timeout"

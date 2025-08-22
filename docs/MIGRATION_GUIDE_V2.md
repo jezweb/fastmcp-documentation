@@ -133,12 +133,12 @@ mcp = FastMCP(
 ### Step 3: Fix Import Paths
 
 ```python
-# Change relative imports to absolute
+# Change to self-contained imports
 # Before:
 from ..shared import Config
 
-# After:
-from shared import Config
+# After (self-contained approach):
+from utils import Config
 ```
 
 ### Step 4: Update Tool Signatures

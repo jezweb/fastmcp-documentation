@@ -1,83 +1,86 @@
-# FastMCP Monorepo Strategy for Multi-Server Projects
+# FastMCP Independent Server Strategy
 
-This guide covers strategies for organizing and deploying multiple related MCP servers from a single repository, based on the successful SimPro MCP servers deployment.
+This guide covers the recommended approach for organizing and deploying multiple MCP servers as completely independent, self-contained units. This strategy eliminates shared dependencies and simplifies deployment while maintaining code quality.
 
 ## Table of Contents
-1. [When to Use Monorepo](#when-to-use-monorepo)
-2. [Repository Structure](#repository-structure)
-3. [Shared Code Management](#shared-code-management)
-4. [Dependency Management](#dependency-management)
+1. [Why Independent Servers](#why-independent-servers)
+2. [Repository Organization](#repository-organization)
+3. [Self-Contained Architecture](#self-contained-architecture)
+4. [Development Workflow](#development-workflow)
 5. [Deployment Strategies](#deployment-strategies)
-6. [Development Workflow](#development-workflow)
-7. [Testing Strategy](#testing-strategy)
-8. [CI/CD Configuration](#cicd-configuration)
-9. [Cost Optimization](#cost-optimization)
-10. [Real-World Example](#real-world-example)
+6. [Testing Strategy](#testing-strategy)
+7. [CI/CD Configuration](#cicd-configuration)
+8. [Code Reuse Patterns](#code-reuse-patterns)
+9. [Real-World Example](#real-world-example)
 
-## When to Use Monorepo
+## Why Independent Servers
 
-### Ideal Use Cases
-- **Related servers** that share domain logic (e.g., all connect to same API)
-- **Modular functionality** that can be deployed separately
-- **Client-specific deployments** where different clients need different server combinations
-- **Shared utilities** and configuration across servers
-- **Consistent versioning** needed across all servers
+### Benefits of Independent Architecture
+- **No shared dependencies** - Each server operates completely independently
+- **Simplified deployment** - Deploy any server without affecting others
+- **Clear boundaries** - Easy to understand what code belongs to which server
+- **Independent scaling** - Scale servers individually based on load
+- **Isolated failures** - Problems in one server don't affect others
+- **Easier testing** - Test each server in complete isolation
+- **Team autonomy** - Different teams can own different servers independently
 
-### When NOT to Use Monorepo
-- Servers with completely different dependencies
-- Different deployment schedules or release cycles
-- Different teams maintaining different servers
-- Security requirements demanding isolation
+### When to Use This Approach
+- **All FastMCP servers** - This is the recommended approach for all projects
+- **Production deployments** - Especially critical for production systems
+- **Multi-tenant scenarios** - Where different clients need different server combinations
+- **Microservice architecture** - Each server is a true microservice
+- **Long-term maintainability** - Easier to maintain and evolve over time
+
+### Legacy Considerations
+If you currently have shared code between servers, migrate to independent servers by:
+- Copying shared utilities into each server's `utils.py`
+- Customizing utilities for each server's specific needs
+- Removing shared dependencies gradually
+- Testing each server independently after migration
 
 ## Repository Structure
 
-### Recommended Layout
+### Recommended Layout for Independent Servers
 ```
-my-mcp-servers/
+my-mcp-project/
 ├── README.md                    # Project overview
-├── DEPLOYMENT.md               # Deployment instructions
-├── TROUBLESHOOTING.md         # Common issues
+├── DEPLOYMENT.md               # Deployment instructions  
 ├── .gitignore                  # Git ignore patterns
 ├── .github/                    # GitHub specific files
 │   └── workflows/              # CI/CD workflows
-│       ├── test.yml           # Test all servers
-│       └── deploy.yml         # Deployment automation
-│
-├── shared/                     # Shared utilities (for development)
-│   ├── __init__.py
-│   ├── config.py              # Shared configuration
-│   ├── client.py              # Shared API client
-│   ├── utils.py               # Common utilities
-│   └── models.py              # Shared data models
+│       ├── test-all.yml        # Test all servers independently
+│       └── deploy.yml          # Deploy servers individually
 │
 ├── scripts/                    # Maintenance scripts
-│   ├── copy-shared.sh         # Copy shared to all servers
-│   ├── test-all.sh           # Test all servers
-│   └── deploy-all.sh         # Deploy all servers
+│   ├── test-all.sh            # Test all servers independently
+│   └── deploy-all.sh          # Deploy all servers independently
 │
-├── server-one/
-│   ├── src/
-│   │   ├── server.py          # Server entry point
-│   │   └── shared/            # Copied shared utilities
-│   │       ├── __init__.py
-│   │       ├── config.py
-│   │       └── utils.py
-│   ├── requirements.txt       # Server-specific deps
-│   ├── tests/                 # Server tests
+├── weather-server/             # Completely independent server
+│   ├── __main__.py            # Server entry point
+│   ├── utils.py               # Complete utilities for this server
+│   ├── config.py              # Server-specific configuration
+│   ├── requirements.txt       # Independent dependencies
+│   ├── .env.example           # Environment template
+│   ├── tests/                 # Server-specific tests
 │   └── README.md              # Server documentation
 │
-├── server-two/
-│   ├── src/
-│   │   ├── server.py
-│   │   └── shared/            # Same shared utilities
-│   ├── requirements.txt
-│   ├── tests/
-│   └── README.md
+├── file-server/               # Completely independent server
+│   ├── __main__.py            # Server entry point
+│   ├── utils.py               # Complete utilities for this server
+│   ├── config.py              # Server-specific configuration
+│   ├── requirements.txt       # Independent dependencies
+│   ├── .env.example           # Environment template
+│   ├── tests/                 # Server-specific tests
+│   └── README.md              # Server documentation
 │
-└── server-three/
-    ├── src/
-    │   ├── server.py
-    │   └── shared/
+└── database-server/           # Completely independent server
+    ├── __main__.py            # Server entry point
+    ├── utils.py               # Complete utilities for this server
+    ├── config.py              # Server-specific configuration
+    ├── requirements.txt       # Independent dependencies
+    ├── .env.example           # Environment template
+    ├── tests/                 # Server-specific tests
+    └── README.md              # Server documentation
     ├── requirements.txt
     ├── tests/
     └── README.md

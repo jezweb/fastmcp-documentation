@@ -1,13 +1,14 @@
-# FastMCP Modular Server Template
+# FastMCP Structured Server Template
 
-A production-ready modular template for FastMCP servers with organized structure and separation of concerns.
+A production-ready structured template for FastMCP servers with organized modules and self-contained utilities.
 
 ## Structure
 
 ```
-modular_template/
+structured_template/
 ├── src/
 │   ├── server.py           # Main server entry point
+│   ├── utils.py            # Self-contained utilities
 │   ├── tools/              # Tool implementations
 │   │   ├── __init__.py
 │   │   ├── data_tools.py   # Data processing tools
@@ -22,16 +23,10 @@ modular_template/
 │   ├── prompts/            # Prompt templates
 │   │   ├── __init__.py
 │   │   └── templates.py    # Pre-defined prompt templates
-│   ├── handlers/           # Event and client handlers
-│   │   ├── __init__.py
-│   │   ├── client_handlers.py  # Client event handling
-│   │   └── event_handlers.py   # Server lifecycle events
-│   └── shared/             # Shared utilities
+│   └── handlers/           # Event and client handlers
 │       ├── __init__.py
-│       ├── config.py       # Configuration management
-│       ├── utils.py        # Common utilities
-│       ├── cache.py        # Caching implementation
-│       └── api_client.py   # HTTP client with pooling
+│       ├── client_handlers.py  # Client event handling
+│       └── event_handlers.py   # Server lifecycle events
 ├── pyproject.toml          # Project configuration
 ├── .env.example            # Environment variables template
 └── README.md               # This file
@@ -39,9 +34,9 @@ modular_template/
 
 ## Features
 
-### Modular Architecture
+### Structured Architecture
 - **Separation of Concerns**: Tools, resources, prompts, and handlers in separate modules
-- **Shared Utilities**: Reusable components for caching, configuration, and API clients
+- **Self-Contained Design**: All utilities consolidated in `utils.py` for easy deployment
 - **Clean Imports**: Organized `__init__.py` files with explicit exports
 
 ### Advanced Features
@@ -51,6 +46,7 @@ modular_template/
 - **Caching**: LRU cache with TTL support
 - **API Client**: Connection pooling and retry logic
 - **Configuration**: Environment-based configuration with validation
+- **Self-Contained Utils**: All utilities in single `utils.py` file for simple deployment
 
 ### Tools Module
 - Data processing tools (transform, validate, export)
@@ -117,6 +113,8 @@ Key configuration areas:
 
 Example:
 ```python
+from ..utils import format_success, format_error, logger
+
 async def my_new_tool(param1: str, param2: int) -> Dict[str, Any]:
     try:
         # Tool implementation
@@ -136,6 +134,9 @@ async def my_new_tool(param1: str, param2: int) -> Dict[str, Any]:
 
 Example:
 ```python
+from ..utils import cache_get, cache_set
+import json
+
 async def get_user_data(user_id: str) -> str:
     cache_key = f"user_{user_id}"
     cached = await cache_get(cache_key)
@@ -179,9 +180,15 @@ ruff src/
 4. Use connection pooling for API integrations
 5. Set up health checks and monitoring
 
-## Note on Shared Utilities
+## Self-Contained Design
 
-While this template includes shared utilities in a separate module, for actual deployment you may want to copy the shared utilities directly into your server to avoid import issues, as was done in the SimPro MCP servers.
+This template uses a self-contained architecture where all utilities are consolidated in `utils.py`. This approach:
+- Eliminates complex import path issues
+- Makes deployment simple and reliable
+- Works seamlessly with FastMCP Cloud
+- Follows the pattern used in production servers like SimPro MCP
+
+All tool modules import from `utils.py` using relative imports like `from ..utils import Config, format_success`.
 
 ## License
 

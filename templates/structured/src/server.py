@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
 """
-Modular FastMCP Server
-======================
-Production-ready MCP server with modular architecture.
+Structured FastMCP Server
+==========================
+Production-ready MCP server with structured, self-contained architecture.
 """
 
 import logging
-import sys
-from pathlib import Path
 from typing import Dict, Any
 
-# Add parent directory to path for shared module access
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from fastmcp import FastMCP
-from shared import Config, format_success, format_error
+from utils import Config, format_success, format_error
 
 # Configure logging
 logging.basicConfig(
@@ -163,8 +158,8 @@ async def startup():
     """Initialize server resources on startup."""
     logger.info(f"Starting {Config.SERVER_NAME} v{Config.SERVER_VERSION}")
     
-    # Initialize shared resources
-    from shared import initialize_cache, verify_api_connection
+    # Initialize resources
+    from utils import initialize_cache, verify_api_connection
     
     await initialize_cache()
     
@@ -179,8 +174,8 @@ async def shutdown():
     """Cleanup on server shutdown."""
     logger.info("Shutting down server")
     
-    # Cleanup shared resources
-    from shared import cleanup_cache, close_api_client
+    # Cleanup resources
+    from utils import cleanup_cache, close_api_client
     
     await cleanup_cache()
     await close_api_client()
@@ -192,7 +187,7 @@ async def shutdown():
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Modular FastMCP Server")
+    parser = argparse.ArgumentParser(description="Structured FastMCP Server")
     parser.add_argument("--test", action="store_true", help="Run in test mode")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     

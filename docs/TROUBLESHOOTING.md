@@ -745,8 +745,8 @@ from .api_client import APIClient
 from .cache import CacheManager
 # Let consuming code create instances
 
-# Usage in other modules
-from shared.api_client import APIClient
+# Usage within same server
+from .utils import APIClient
 client = APIClient()
 ```
 
@@ -780,9 +780,9 @@ async def modern_async():
 # ❌ Relative imports that break:
 from src.shared import config  # Works locally, fails in cloud
 
-# ✅ Package-relative imports:
-from .shared import config  # When in same package
-from shared import config   # When shared is in sys.path
+# ✅ Self-contained imports:
+from .utils import config   # When utils.py in same directory  
+from utils import config    # When utils.py at package root
 
 # Debug import issues:
 import sys

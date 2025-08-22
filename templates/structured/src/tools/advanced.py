@@ -10,13 +10,7 @@ from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
 import json
 
-import sys
-from pathlib import Path
-
-# Add parent directories to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from shared import format_success, format_error, Config
+from ..utils import format_success, format_error, Config
 
 logger = logging.getLogger(__name__)
 

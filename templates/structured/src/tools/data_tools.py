@@ -5,16 +5,11 @@ Tools for data manipulation and processing.
 """
 
 import logging
-import sys
-from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import json
 
-# Add parent directories to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from shared import format_success, format_error, validate_input
+from ..utils import format_success, format_error, validate_input
 
 logger = logging.getLogger(__name__)
 

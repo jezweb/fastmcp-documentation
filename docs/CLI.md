@@ -349,22 +349,6 @@ fastmcp deploy --config deploy.yaml
 fastmcp deploy --dry-run
 ```
 
-### Docker Support
-
-```bash
-# Generate Dockerfile
-fastmcp docker init
-
-# Build Docker image
-fastmcp docker build --tag my-server:latest
-
-# Run in Docker
-fastmcp docker run my-server:latest
-
-# Push to registry
-fastmcp docker push my-server:latest --registry docker.io
-```
-
 ## Utility Commands
 
 ### Validate Server
@@ -799,7 +783,6 @@ fastmcp test-data      # Generate test data
 # Deployment
 fastmcp build          # Build package
 fastmcp deploy         # Deploy server
-fastmcp docker         # Docker commands
 
 # Documentation
 fastmcp docs generate  # Generate docs
@@ -876,10 +859,7 @@ fastmcp test --all
 # 3. Build optimized package
 fastmcp build --optimize --output dist/
 
-# 4. Generate Docker image
-fastmcp docker build --tag weather-server:v1.0.0
-
-# 5. Deploy to cloud
+# 4. Deploy to cloud
 fastmcp deploy \
   --provider aws \
   --env production \
@@ -907,7 +887,6 @@ Key features:
 - Interactive project setup
 - Code generation from OpenAPI
 - Built-in testing framework
-- Docker support
 - Cloud deployment
 - Comprehensive logging
 - Plugin system

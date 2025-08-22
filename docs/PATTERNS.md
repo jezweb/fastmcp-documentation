@@ -733,27 +733,7 @@ mcp = FastMCP(
 )
 ```
 
-### Pattern 2: Multi-Stage Docker Deployment
-```dockerfile
-# Build stage
-FROM python:3.11-slim as builder
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --user -r requirements.txt
-
-# Runtime stage
-FROM python:3.11-slim
-WORKDIR /app
-COPY --from=builder /root/.local /root/.local
-COPY . .
-
-ENV PATH=/root/.local/bin:$PATH
-ENV PYTHONUNBUFFERED=1
-
-CMD ["python", "server.py"]
-```
-
-### Pattern 3: Health Check Implementation
+### Pattern 2: Health Check Implementation
 ```python
 from datetime import datetime
 import psutil

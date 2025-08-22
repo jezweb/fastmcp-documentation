@@ -1,11 +1,11 @@
-# Case Study: SimPro MCP Servers v2.0.0 Upgrade
+# Case Study: SimPro MCP Servers v2 Upgrade
 
 ## Executive Summary
 
-Successfully upgraded 6 SimPro MCP servers from FastMCP v1.0.0 to v2.0.0, adding 48 dynamic resource templates, progress reporting, and standardized resilience patterns across 140+ tools.
+Successfully upgraded 6 SimPro MCP servers to FastMCP v2.12.0+, adding 48 dynamic resource templates, progress reporting, and standardized resilience patterns across 140+ tools.
 
 **Key Outcomes:**
-- ✅ All 6 servers upgraded to FastMCP v2.0.0
+- ✅ All 6 servers upgraded to FastMCP v2.12.0+
 - ✅ 48 dynamic resource templates added (8 per server)
 - ✅ Progress reporting implemented via `ctx.report_progress()`
 - ✅ Standardized utility modules with retry logic and monitoring
@@ -20,8 +20,8 @@ Successfully upgraded 6 SimPro MCP servers from FastMCP v1.0.0 to v2.0.0, adding
 - Monolithic tool files
 - No resource templates
 
-### Target State (v2.0.0)
-- FastMCP v2.0.0 with new features
+### Target State (v2.12.0+)
+- FastMCP v2.12.0+ with new features
 - Dynamic resource templates with parameterized URIs
 - Progress reporting for long-running operations
 - Modular tool organization
@@ -66,7 +66,7 @@ Successfully upgraded 6 SimPro MCP servers from FastMCP v1.0.0 to v2.0.0, adding
 async def customer_profile():
     return {"uri": "customer://profile", "data": {...}}
 
-# After (v2.0.0) - Dynamic templates
+# After (v2.12.0+) - Dynamic templates
 @mcp.resource("customer://profile/{customer_id}")
 async def customer_profile_resource(customer_id: str):
     data = await get_customer_profile(customer_id)
@@ -151,7 +151,7 @@ class RetryHandler:
 - Basic error handling with full failures
 - No resource caching
 
-### After v2.0.0
+### After v2.12.0+
 - Real-time progress reporting
 - Batch processing with partial success handling
 - Retry logic with exponential backoff
@@ -187,7 +187,7 @@ class RetryHandler:
 
 ## Metrics
 
-| Metric | Before (v1.0.0) | After (v2.0.0) | Improvement |
+| Metric | Before (v1.0.0) | After (v2.12.0+) | Improvement |
 |--------|-----------------|----------------|-------------|
 | Total Tools | 140 | 140 | Maintained |
 | Resource Templates | 0 | 48 | +48 |
@@ -200,7 +200,7 @@ class RetryHandler:
 ## Recommendations
 
 ### For Future MCP Server Development
-1. **Start with v2.0.0**: New features worth the initial complexity
+1. **Start with v2.12.0+**: New features worth the initial complexity
 2. **Design resources early**: Dynamic templates shape the API
 3. **Implement progress reporting**: Critical for user experience
 4. **Use consistent patterns**: Each server self-contained but following standards
@@ -267,7 +267,7 @@ async def batch_operation(ctx: Context, items: list):
 
 ## Conclusion
 
-The SimPro MCP servers v2.0.0 upgrade demonstrates that systematic migration to new framework versions can be achieved with minimal disruption. The key success factors were:
+The SimPro MCP servers v2.12.0+ upgrade demonstrates that systematic migration to new framework versions can be achieved with minimal disruption. The key success factors were:
 
 1. **Phased approach**: Reduced risk and allowed learning
 2. **Comprehensive testing**: Validation scripts caught issues early
@@ -283,11 +283,11 @@ The upgraded servers now provide better user experience through progress reporti
 simpro-mcp-servers/
 ├── simpro-customer/
 │   ├── src/
-│   │   ├── server.py          # FastMCP v2.0.0
+│   │   ├── server.py          # FastMCP v2.12.0+
 │   │   ├── tools/             # Modular tools
 │   │   ├── resources/         # Dynamic templates
 │   │   └── shared/            # Utility modules (self-contained)
-│   └── requirements.txt       # fastmcp>=2.0.0
+│   └── requirements.txt       # fastmcp>=2.12.0
 ├── simpro-admin/              # Same structure (independent)
 ├── simpro-finance/            # Same structure (independent)
 ├── simpro-inventory/          # Same structure (independent)
@@ -300,4 +300,4 @@ simpro-mcp-servers/
 *Document Version: 1.0*  
 *Date: 2025-08-22*  
 *Author: Development Team*  
-*Project: SimPro MCP Servers v2.0.0 Upgrade*
+*Project: SimPro MCP Servers v2.12.0+ Upgrade*

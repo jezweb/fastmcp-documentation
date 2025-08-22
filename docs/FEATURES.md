@@ -69,6 +69,8 @@ async with Client("server.py") as client:
 
 ## Elicitation (Interactive Input)
 
+**Requirements:** MCP spec version 2.10.0+
+
 Elicitation allows servers to request structured input from users during tool execution. This enables interactive workflows and dynamic parameter gathering.
 
 ### Server Implementation
@@ -124,7 +126,6 @@ async def confirm_deletion(file_path: str, ctx: Context) -> str:
 ### Client Handler Implementation
 ```python
 from fastmcp import Client
-from fastmcp.client.elicitation import ElicitResult
 
 async def elicitation_handler(
     message: str, 
@@ -151,7 +152,7 @@ async def elicitation_handler(
         if confirm.lower() == 'y':
             return {}  # Empty object for confirmation
         else:
-            return ElicitResult(action="decline")
+            return None  # Indicates decline
 
 # Create client with handler
 client = Client("server.py", elicitation_handler=elicitation_handler)
@@ -168,7 +169,9 @@ async with client:
 
 ## Progress Tracking
 
-Progress tracking enables monitoring of long-running operations, essential for user feedback during batch processing or slow operations.
+**Requirements:** Client must provide `progressToken` in request
+
+Progress tracking enables monitoring of long-running operations, essential for user feedback during batch processing or slow operations. Note: If the client doesn't provide a `progressToken`, progress reporting calls will be silently ignored.
 
 ### Server Implementation
 ```python
@@ -263,12 +266,13 @@ async with client:
 
 ## Sampling (LLM Integration)
 
+**Requirements:** MCP spec version 2.0.0+
+
 Sampling allows MCP servers to request LLM completions from clients, enabling AI-powered validation, content generation, and decision-making within tools.
 
 ### Server Implementation
 ```python
 from fastmcp import FastMCP, Context
-from fastmcp.client.sampling import SamplingMessage
 
 mcp = FastMCP("ai-powered-server")
 

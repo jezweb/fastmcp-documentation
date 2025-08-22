@@ -241,36 +241,26 @@ RouteMap(
 ### Custom Component Function
 
 ```python
-def customize_component(component, route_info):
+def customize_component(route, component):
     """
     Customize generated components.
     
     Args:
-        component: The generated MCP component
-        route_info: HTTPRoute object with path, method, etc.
+        route: HTTPRoute object with path, method, etc.
+        component: The generated MCP component (Tool, Resource, or ResourceTemplate)
     
-    Returns:
-        Modified component or None to exclude
+    Note: Component is modified in-place, no return value needed
     """
-    # Improve naming
-    if component.name.startswith("get_"):
-        component.name = component.name[4:]  # Remove 'get_' prefix
-    
-    # Add tags based on path
-    if "/admin/" in route_info.path:
-        component.tags = ["admin", "restricted"]
-    elif "/public/" in route_info.path:
-        component.tags = ["public"]
+    # Add tags based on path (tags is a set)
+    if "/admin/" in route.path:
+        component.tags.add("admin")
+        component.tags.add("restricted")
+    elif "/public/" in route.path:
+        component.tags.add("public")
     
     # Enhance descriptions
     if not component.description:
-        component.description = f"Access {route_info.path} via {route_info.method}"
-    
-    # Exclude deprecated endpoints
-    if route_info.deprecated:
-        return None  # Exclude this component
-    
-    return component
+        component.description = f"Access {route.path} via {route.method}"
 
 mcp = FastMCP.from_openapi(
     openapi_spec=spec,
@@ -286,32 +276,30 @@ class ComponentEnhancer:
     def __init__(self, config):
         self.config = config
     
-    def __call__(self, component, route_info):
-        # Complex logic based on configuration
-        if route_info.path in self.config.priority_endpoints:
-            component.priority = "high"
+    def __call__(self, route, component):
+        """
+        Args:
+            route: HTTPRoute object
+            component: MCP component to modify in-place
+        """
+        # Add tags based on configuration
+        if route.path in self.config.priority_endpoints:
+            component.tags.add("priority")
         
-        # Add metadata
-        component.metadata = {
-            "original_path": route_info.path,
-            "method": route_info.method,
-            "api_version": self.extract_version(route_info.path)
-        }
+        # Add version tag if found in path
+        version = self.extract_version(route.path)
+        if version:
+            component.tags.add(f"v{version}")
         
-        # Transform parameters
-        if hasattr(component, 'parameters'):
-            for param in component.parameters:
-                if param.name == 'limit':
-                    param.default = 100
-                    param.maximum = 1000
-        
-        return component
+        # Enhance description with method info
+        if component.description:
+            component.description = f"[{route.method}] {component.description}"
     
     def extract_version(self, path):
         # Extract API version from path
         import re
         match = re.search(r'/v(\d+)/', path)
-        return match.group(1) if match else "1"
+        return match.group(1) if match else None
 
 enhancer = ComponentEnhancer(config)
 mcp = FastMCP.from_openapi(

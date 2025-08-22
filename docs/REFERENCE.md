@@ -114,7 +114,8 @@ from fastmcp import FastMCP
 # Load spec
 spec = httpx.get("https://api.example.com/openapi.json").json()
 
-# Create client
+# Create client with auth
+token = "your-api-token"  # Get from environment or config
 client = httpx.AsyncClient(
     base_url="https://api.example.com",
     headers={"Authorization": f"Bearer {token}"}
@@ -141,6 +142,8 @@ mcp = FastMCP.from_fastapi(app=app)
 ```python
 from fastmcp.server.openapi import RouteMap, MCPType
 
+# Default behavior in FastMCP 2.8.0+: all routes become tools
+# To restore semantic mapping from earlier versions:
 route_maps = [
     # GET with params → ResourceTemplate
     RouteMap(
@@ -159,6 +162,13 @@ route_maps = [
         mcp_type=MCPType.TOOL
     ),
 ]
+
+# Pass to from_openapi:
+mcp = FastMCP.from_openapi(
+    openapi_spec=spec,
+    client=client,
+    route_maps=route_maps
+)
 ```
 
 ## Client Handlers
@@ -168,7 +178,10 @@ route_maps = [
 from fastmcp import Client
 
 async def handle_elicitation(message: str, response_type: type):
-    """Handle interactive input requests."""
+    """Handle interactive input requests.
+    
+    Note: Requires MCP spec 2.10.0+ for full support.
+    """
     # For simple text input
     if response_type == str:
         return input(f"{message}: ")
@@ -181,7 +194,10 @@ client = Client("server.py", elicitation_handler=handle_elicitation)
 ### Progress Handler
 ```python
 async def handle_progress(progress: float, total: float | None, message: str | None):
-    """Track operation progress."""
+    """Track operation progress.
+    
+    Note: Server must provide progressToken for progress tracking.
+    """
     if total:
         pct = (progress / total) * 100
         print(f"[{pct:.1f}%] {message}")
@@ -192,7 +208,10 @@ client = Client("server.py", progress_handler=handle_progress)
 ### Sampling Handler
 ```python
 async def handle_sampling(messages, model_preferences):
-    """Handle LLM requests from server."""
+    """Handle LLM requests from server.
+    
+    Note: Requires MCP spec 2.0.0+ for sampling support.
+    """
     # messages is a list of {"role": str, "content": str}
     # model_preferences may contain temperature, maxTokens, systemPrompt, etc.
     response = await llm.generate(

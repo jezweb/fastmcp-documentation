@@ -16,7 +16,7 @@ A comprehensive guide for building, deploying, and integrating FastMCP servers b
 ## Quick Start
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.10+
 - GitHub account (for FastMCP Cloud deployment)
 - pip or uv package manager
 
@@ -169,7 +169,7 @@ if __name__ == "__main__":
 
 ### Step 3: Add Dependencies
 ```txt
-fastmcp>=0.3.0
+fastmcp>=2.12.0
 httpx  # For API calls
 python-dotenv  # For environment variables
 ```

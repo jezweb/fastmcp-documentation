@@ -292,25 +292,24 @@ async def create_openapi_server():
     
     return mcp
 
-def customize_component(component, route_info):
-    """Customize generated components."""
-    # Improve naming
-    if component.name.startswith("get_"):
-        component.name = component.name[4:]  # Remove 'get_' prefix
+def customize_component(route, component):
+    """Customize generated components.
     
+    Args:
+        route: HTTPRoute object with path, method, etc.
+        component: The MCP component (Tool, Resource, or ResourceTemplate)
+    """
     # Add tags based on path
-    if "/users/" in route_info.path:
-        component.tags = ["users"]
-    elif "/products/" in route_info.path:
-        component.tags = ["products"]
+    if "/users/" in route.path:
+        component.tags.add("users")
+    elif "/products/" in route.path:
+        component.tags.add("products")
     
-    # Enhance descriptions
+    # Enhance descriptions if missing
     if not component.description:
-        method = route_info.method.upper()
-        path = route_info.path
+        method = route.method.upper()
+        path = route.path
         component.description = f"{method} {path}"
-    
-    return component
 
 # Run server
 mcp = asyncio.run(create_openapi_server())
@@ -820,17 +819,18 @@ WorkOS provides enterprise-grade authentication, user management, and SSO capabi
 ```python
 from fastmcp import FastMCP
 import workos
-from fastmcp.server.auth import WorkOSAuthProvider
+from fastmcp.server.auth.providers.workos import WorkOSProvider
 
-# Initialize WorkOS
+# Initialize WorkOS SDK
 workos.api_key = os.getenv("WORKOS_API_KEY")
 workos.client_id = os.getenv("WORKOS_CLIENT_ID")
 
-# Create WorkOS auth provider
-auth_provider = WorkOSAuthProvider(
+# Create WorkOS auth provider for FastMCP
+auth_provider = WorkOSProvider(
     client_id=os.getenv("WORKOS_CLIENT_ID"),
     client_secret=os.getenv("WORKOS_CLIENT_SECRET"),
-    redirect_uri="http://localhost:8000/callback"
+    authkit_domain=os.getenv("WORKOS_AUTHKIT_DOMAIN"),  # e.g., "https://your-app.authkit.app"
+    base_url="http://localhost:8000"
 )
 
 mcp = FastMCP("workos-server", auth=auth_provider)
@@ -877,14 +877,8 @@ async def list_organization_users(organization_id: str) -> dict:
 ### SSO Authentication Flow
 
 ```python
-from fastmcp.server.auth.workos import WorkOSSSO
-
-# Configure SSO providers
-sso = WorkOSSSO(
-    client_id=os.getenv("WORKOS_CLIENT_ID"),
-    client_secret=os.getenv("WORKOS_CLIENT_SECRET"),
-    redirect_uri="http://localhost:8000/sso/callback"
-)
+# SSO is handled by WorkOSProvider automatically
+# The provider manages OAuth flow and token validation
 
 @mcp.tool()
 async def initiate_sso(organization_id: str, provider: str = "GoogleOAuth") -> dict:

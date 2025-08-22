@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 
-from fastmcp import FastMCP, elicit, report_progress, sample
+from fastmcp import FastMCP
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -85,13 +85,13 @@ def create_advanced_server() -> FastMCP:
     # ============================================================
     
     @mcp.tool
-    async def interactive_setup() -> Dict[str, Any]:
+    async def interactive_setup(context) -> Dict[str, Any]:
         """
         Interactive setup wizard using elicitation.
         Demonstrates different input types and validation.
         """
         # Get project name
-        project_name = await elicit(
+        project_name = await context.elicit(
             "What is your project name?",
             str,
             {"context": "setup", "step": 1}
@@ -100,7 +100,7 @@ def create_advanced_server() -> FastMCP:
         # Get project type with validation
         project_type = None
         while project_type not in ["api", "web", "cli", "library"]:
-            project_type = await elicit(
+            project_type = await context.elicit(
                 "Project type? (api/web/cli/library)",
                 str,
                 {"context": "setup", "step": 2}
@@ -109,7 +109,7 @@ def create_advanced_server() -> FastMCP:
                 logger.warning(f"Invalid project type: {project_type}")
         
         # Get port number
-        port_str = await elicit(
+        port_str = await context.elicit(
             "Port number? (default: 8000)",
             str,
             {"context": "setup", "step": 3, "default": "8000"}
@@ -117,7 +117,7 @@ def create_advanced_server() -> FastMCP:
         port = int(port_str) if port_str else 8000
         
         # Confirm settings
-        confirm = await elicit(
+        confirm = await context.elicit(
             f"Create {project_type} project '{project_name}' on port {port}? (yes/no)",
             str,
             {"context": "setup", "step": 4}
@@ -137,12 +137,12 @@ def create_advanced_server() -> FastMCP:
         }
     
     @mcp.tool
-    async def secure_operation() -> Dict[str, Any]:
+    async def secure_operation(context) -> Dict[str, Any]:
         """
         Demonstrates password/secret elicitation.
         """
         # Get password (should be masked in UI)
-        password = await elicit(
+        password = await context.elicit(
             "Enter admin password:",
             str,
             {"context": "auth", "sensitive": True}
@@ -153,7 +153,7 @@ def create_advanced_server() -> FastMCP:
             return {"error": "Password too short"}
         
         # Get 2FA code
-        code = await elicit(
+        code = await context.elicit(
             "Enter 2FA code:",
             str,
             {"context": "auth", "type": "otp"}
@@ -172,7 +172,7 @@ def create_advanced_server() -> FastMCP:
     # ============================================================
     
     @mcp.tool
-    async def process_batch(items: List[str]) -> Dict[str, Any]:
+    async def process_batch(context, items: List[str]) -> Dict[str, Any]:
         """
         Process items with progress reporting.
         """
@@ -181,7 +181,7 @@ def create_advanced_server() -> FastMCP:
         
         for i, item in enumerate(items):
             # Report progress
-            await report_progress(
+            await context.report_progress(
                 i + 1,
                 total,
                 f"Processing {item}"
@@ -194,14 +194,14 @@ def create_advanced_server() -> FastMCP:
             # Report sub-progress for complex items
             if "complex" in item.lower():
                 for j in range(5):
-                    await report_progress(
+                    await context.report_progress(
                         i + (j / 5),
                         total,
                         f"Complex processing step {j+1}/5 for {item}"
                     )
                     await asyncio.sleep(0.1)
         
-        await report_progress(total, total, "Batch processing complete")
+        await context.report_progress(total, total, "Batch processing complete")
         
         return {
             "status": "complete",
@@ -210,7 +210,7 @@ def create_advanced_server() -> FastMCP:
         }
     
     @mcp.tool
-    async def download_files(urls: List[str]) -> Dict[str, Any]:
+    async def download_files(context, urls: List[str]) -> Dict[str, Any]:
         """
         Download files with detailed progress.
         """
@@ -230,7 +230,7 @@ def create_advanced_server() -> FastMCP:
                     downloaded = file_size
                 
                 # Report download progress
-                await report_progress(
+                await context.report_progress(
                     downloaded,
                     file_size,
                     f"Downloading {file_name}: {downloaded/1024:.1f}KB / {file_size/1024:.1f}KB"
@@ -255,6 +255,7 @@ def create_advanced_server() -> FastMCP:
     
     @mcp.tool
     async def generate_code(
+        context,
         language: str,
         description: str,
         style: str = "clean"
@@ -275,7 +276,7 @@ def create_advanced_server() -> FastMCP:
         ]
         
         # Request LLM generation
-        result = await sample(
+        result = await context.sample(
             messages=messages,
             model="gpt-4",
             temperature=0.7,
@@ -291,14 +292,14 @@ def create_advanced_server() -> FastMCP:
         }
     
     @mcp.tool
-    async def analyze_text(text: str) -> Dict[str, Any]:
+    async def analyze_text(context, text: str) -> Dict[str, Any]:
         """
         Analyze text using LLM with specific instructions.
         """
         # Multi-step analysis with sampling
         
         # Step 1: Sentiment analysis
-        sentiment_result = await sample(
+        sentiment_result = await context.sample(
             messages=[
                 {"role": "system", "content": "Analyze sentiment. Reply with only: positive, negative, or neutral"},
                 {"role": "user", "content": text}
@@ -309,7 +310,7 @@ def create_advanced_server() -> FastMCP:
         )
         
         # Step 2: Key topics
-        topics_result = await sample(
+        topics_result = await context.sample(
             messages=[
                 {"role": "system", "content": "Extract 3 key topics as comma-separated list"},
                 {"role": "user", "content": text}
@@ -320,7 +321,7 @@ def create_advanced_server() -> FastMCP:
         )
         
         # Step 3: Summary
-        summary_result = await sample(
+        summary_result = await context.sample(
             messages=[
                 {"role": "system", "content": "Summarize in one sentence"},
                 {"role": "user", "content": text}
@@ -340,6 +341,7 @@ def create_advanced_server() -> FastMCP:
     
     @mcp.tool
     async def smart_search(
+        ctx,
         query: str,
         context: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -347,7 +349,7 @@ def create_advanced_server() -> FastMCP:
         Smart search with LLM-enhanced query understanding.
         """
         # First, understand the query intent
-        intent_result = await sample(
+        intent_result = await ctx.sample(
             messages=[
                 {
                     "role": "system",
@@ -363,7 +365,7 @@ def create_advanced_server() -> FastMCP:
         intent = intent_result.get("content", "informational")
         
         # Expand query with synonyms and related terms
-        expansion_result = await sample(
+        expansion_result = await ctx.sample(
             messages=[
                 {
                     "role": "system",
@@ -398,23 +400,23 @@ def create_advanced_server() -> FastMCP:
     # ============================================================
     
     @mcp.tool
-    async def intelligent_pipeline(data_source: str) -> Dict[str, Any]:
+    async def intelligent_pipeline(context, data_source: str) -> Dict[str, Any]:
         """
         Demonstrates combining elicitation, progress, and sampling.
         """
         # Step 1: Get processing preferences via elicitation
-        await report_progress(0, 5, "Getting processing preferences")
+        await context.report_progress(0, 5, "Getting processing preferences")
         
-        mode = await elicit(
+        mode = await context.elicit(
             "Processing mode? (fast/accurate/balanced)",
             str,
             {"step": "configuration"}
         )
         
         # Step 2: Analyze data source with LLM
-        await report_progress(1, 5, "Analyzing data source")
+        await context.report_progress(1, 5, "Analyzing data source")
         
-        analysis = await sample(
+        analysis = await context.sample(
             messages=[
                 {"role": "system", "content": "Analyze data source and suggest processing approach"},
                 {"role": "user", "content": f"Data source: {data_source}, Mode: {mode}"}
@@ -424,13 +426,13 @@ def create_advanced_server() -> FastMCP:
         )
         
         # Step 3: Process with progress tracking
-        await report_progress(2, 5, "Processing data")
+        await context.report_progress(2, 5, "Processing data")
         await asyncio.sleep(1)  # Simulate processing
         
         # Step 4: Get user validation
-        await report_progress(3, 5, "Awaiting validation")
+        await context.report_progress(3, 5, "Awaiting validation")
         
-        validation = await elicit(
+        validation = await context.elicit(
             f"Processing suggestion: {analysis.get('content', 'Standard processing')}. Proceed? (yes/no)",
             str,
             {"step": "validation"}
@@ -440,10 +442,10 @@ def create_advanced_server() -> FastMCP:
             return {"status": "cancelled"}
         
         # Step 5: Final processing
-        await report_progress(4, 5, "Finalizing")
+        await context.report_progress(4, 5, "Finalizing")
         await asyncio.sleep(0.5)
         
-        await report_progress(5, 5, "Complete")
+        await context.report_progress(5, 5, "Complete")
         
         return {
             "status": "complete",

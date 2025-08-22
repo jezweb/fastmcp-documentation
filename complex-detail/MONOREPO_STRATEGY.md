@@ -148,7 +148,7 @@ def build_server(server_name):
 ### Shared Dependencies Pattern
 ```python
 # shared/requirements-base.txt
-fastmcp>=0.3.0
+fastmcp>=2.12.0
 httpx>=0.24.0
 python-dotenv>=1.0.0
 pydantic>=2.0.0
@@ -167,7 +167,7 @@ pandas>=2.0.0
 ```python
 # server-one/requirements.txt
 # Must list all dependencies explicitly
-fastmcp>=0.3.0
+fastmcp>=2.12.0
 httpx>=0.24.0
 python-dotenv>=1.0.0
 pydantic>=2.0.0
@@ -609,7 +609,7 @@ EOF
 
 # 4. Create requirements.txt
 cat > server-new/requirements.txt << 'EOF'
-fastmcp>=0.3.0
+fastmcp>=2.12.0
 httpx>=0.24.0
 python-dotenv>=1.0.0
 EOF

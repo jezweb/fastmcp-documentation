@@ -13,7 +13,12 @@ import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
-from ..shared import format_success, format_error, Config
+from pathlib import Path
+
+# Add parent directories to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from shared import format_success, format_error, Config
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +96,7 @@ async def health_check(
             # Check API connection if configured
             if Config.API_BASE_URL:
                 try:
-                    from ..shared import verify_api_connection
+                    from shared import verify_api_connection
                     api_healthy = await verify_api_connection()
                     
                     health_status["checks"].append({
@@ -114,7 +119,7 @@ async def health_check(
             # Check cache if enabled
             if Config.ENABLE_CACHE:
                 try:
-                    from ..shared import get_cache_stats
+                    from shared import get_cache_stats
                     cache_stats = await get_cache_stats()
                     
                     health_status["checks"].append({

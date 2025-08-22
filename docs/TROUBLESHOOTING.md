@@ -8,7 +8,7 @@
 ```bash
 # Error: ModuleNotFoundError: No module named 'fastmcp'
 # Solution: Install with correct version
-pip install "fastmcp>=0.3.0"
+pip install "fastmcp>=2.12.0"
 
 # Error: Version conflicts
 # Solution: Use virtual environment
@@ -64,12 +64,12 @@ async def handle_elicitation(message: str, response_type: type, context: dict):
 client = Client("server.py", elicitation_handler=handle_elicitation)
 
 # Check 2: Server using elicit correctly
-from fastmcp import elicit
+# Note: elicit is passed via context parameter
 
 @mcp.tool
-async def needs_input():
-    # Must use await with elicit
-    user_input = await elicit("Enter value:", str)
+async def needs_input(context):
+    # Access elicit from context
+    user_input = await context.elicit("Enter value:", str)
     return user_input
 
 # Debug: Add logging
@@ -83,14 +83,15 @@ async def handle_elicitation(message: str, response_type: type, context: dict):
 #### Progress Handler Not Updating
 ```python
 # Problem: Progress not showing
-# Check 1: Using report_progress correctly
-from fastmcp import report_progress
+# Check 1: Using progress tracking correctly
+# Note: progressToken must be provided in tool call
 
 @mcp.tool
-async def long_task():
+async def long_task(context):
     for i in range(100):
-        # Must await report_progress
-        await report_progress(i, 100, f"Processing {i}")
+        # Report progress if token provided
+        if context.progressToken:
+            await context.report_progress(i, 100, f"Processing {i}")
         await asyncio.sleep(0.1)
 
 # Check 2: Handler implementation
@@ -123,16 +124,16 @@ async def handle_sampling(messages, params, context):
     }
 
 # Check 2: Server sampling request
-from fastmcp import sample
+# Note: sample is passed via context parameter
 
 @mcp.tool
-async def ai_tool():
+async def ai_tool(context):
     # Correct message format
     messages = [
         {"role": "user", "content": "Generate text"}
     ]
     
-    result = await sample(
+    result = await context.sample(
         messages=messages,
         model="gpt-4",
         temperature=0.7

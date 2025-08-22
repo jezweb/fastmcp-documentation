@@ -6,11 +6,16 @@ Tools for interacting with external APIs.
 
 import logging
 import json
+import sys
+from pathlib import Path
 from typing import Dict, Any, Optional, List
 import aiohttp
 from datetime import datetime
 
-from ..shared import format_success, format_error, get_api_client
+# Add parent directories to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from shared import format_success, format_error, get_api_client
 
 logger = logging.getLogger(__name__)
 

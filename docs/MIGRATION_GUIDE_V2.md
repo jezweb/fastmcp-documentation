@@ -1,8 +1,8 @@
-# FastMCP v2.0.0 Migration Guide
+# FastMCP v2 Migration Guide
 
 ## Overview
 
-This guide provides step-by-step instructions for migrating MCP servers from FastMCP v1.x to v2.0.0, based on real-world experience upgrading the SimPro MCP servers.
+This guide provides step-by-step instructions for migrating MCP servers from FastMCP v1.x to v2.12.0+, based on real-world experience upgrading production MCP servers.
 
 ## Breaking Changes
 
@@ -87,16 +87,18 @@ async def get_item(category: str, id: str):
 
 ### 3. Interactive Workflows
 
-Use `elicit()` for interactive user input:
+Use elicitation through context parameter:
 
 ```python
-from fastmcp import elicit
-
 @mcp.tool()
-async def interactive_setup():
-    name = await elicit("What's your name?", str)
-    age = await elicit("What's your age?", int)
-    confirmed = await elicit("Confirm setup?", bool)
+async def interactive_setup(context):
+    """Interactive setup with user input.
+    
+    Note: Requires MCP spec 2.10.0+ for elicitation support.
+    """
+    name = await context.elicit("What's your name?", str)
+    age = await context.elicit("What's your age?", int)
+    confirmed = await context.elicit("Confirm setup?", bool)
     
     if confirmed:
         return {"name": name, "age": age}
@@ -108,8 +110,8 @@ async def interactive_setup():
 
 ```bash
 # Update requirements.txt
-fastmcp>=2.0.0
-pydantic>=2.0.0
+fastmcp>=2.12.0
+pydantic>=2.5.0
 
 # Install updates
 pip install -r requirements.txt --upgrade

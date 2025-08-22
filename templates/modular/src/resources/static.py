@@ -5,10 +5,15 @@ Static server resources that don't change frequently.
 """
 
 import logging
+import sys
+from pathlib import Path
 from typing import Dict, Any
 from datetime import datetime
 
-from ..shared import Config
+# Add parent directories to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from shared import Config
 
 logger = logging.getLogger(__name__)
 

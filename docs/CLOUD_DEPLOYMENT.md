@@ -174,7 +174,7 @@ file:///path/to/package   # File URLs
 ### ✅ What Works
 ```txt
 # requirements.txt
-fastmcp>=0.3.0
+fastmcp>=2.12.0
 httpx>=0.24.0
 python-dotenv>=1.0.0
 pydantic>=2.0.0
